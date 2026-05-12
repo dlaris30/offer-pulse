@@ -12,7 +12,7 @@ description: Given a Jira offer ticket (e.g. AGIGROWTH-161), a surface ITC, or a
 | **A — Curated Offer** | Ticket is about a new/variant offer or bundle configuration | Offer type (Standalone/Collection), Curated Offer ID, Base Offer ID, Plan (Standalone) or all Component Offer IDs + per-component plans (Collection) — ready for ecomm engineering ticket |
 | **B — Pricing / Discount** | Ticket is about applying or changing a discount code or price point | Complete PFID list with current discount codes and pricing — ready for pricing ticket |
 
-After the clarifying questions gate resolves, execute immediately — run queries, then catalog MCP where needed, then present results. Do not narrate steps mid-execution.
+After the clarifying questions gate resolves, execute immediately and silently — run all queries, then all catalog/merchandising calls, collect every result, then render the complete output once at the end. Never emit partial output, intermediate tables, or step narration mid-execution. The analyst sees only the final assembled output.
 
 **HARD CONSTRAINTS:**
 - Read-only. Never create, update, transition, or comment on any Jira ticket without explicit analyst instruction.
@@ -34,6 +34,7 @@ After the clarifying questions gate resolves, execute immediately — run querie
 | CES | Legacy Offer | Classic eCommerce — no named bundle. `package_id` is null. |
 | Standalone Offer | Single-product curated offer | Curated offer with no bundled add-ons. One Base Offer ID, one plan. |
 | Offer Collection | Bundled curated offer | Curated offer with one or more add-ons wired via `prePurchaseKeyMap`. Base Offer ID + Component Offer IDs. |
+| CES Package | Legacy named bundle | A named CES offer configuration in the merchandising API (e.g. `wordpress-basic-1yr`). Not present in billing — used only for catalog resolution on fully-CES surfaces. |
 
 ---
 
@@ -47,6 +48,7 @@ These IDs appear in all Path A output. Use them consistently.
 | **Base Offer ID** | UUID in the `offerId` field of `get_curated_offer`. Points to an Offer Collection definition (the primary product). | `get_curated_offer` response |
 | **Offer Collection** | Product definition with plans, terms, and pricing schema. Always the primary product. Retrieved via `get_offer_collection_definition`. | `catalog-offers` datasource |
 | **Component Offer ID** | UUID from `prePurchaseKeyMap.offers[].offerId`. Each is a bundled add-on (e.g. M365, Titan Email). Retrieved via `get_offer_definition_by_id`. | `catalog-offers` datasource |
+| **CES Package ID** | Slug from the GoDaddy merchandising API (e.g. `wordpress-basic-ssl-1yr`). Used only on the CES fallback path — never present in billing data. | `https://merchandising.api.godaddy.com/v1/packages` |
 
 **Critical rule (from catalog team):** Do not assume a Curated Offer ID maps to a single product or plan. If `prePurchaseKeyMap` is present and non-empty, it is an Offer Collection — iterate all components and resolve each individually. Never use the top-level plan as authoritative for collections.
 
@@ -77,7 +79,9 @@ These calls use the `catalog-mcp-dev` MCP server (`mcp__catalog-mcp-dev__*` tool
 | Look up a curated offer by package ID | `get_curated_offer(curatedOfferId=<package_id>)` | `catalog-curated-offers` |
 | Look up a Base Offer (Offer Collection) | `get_offer_collection_definition(offerCollectionId=<offerId>)` | `catalog-offers` |
 | Look up a Component Offer (add-on) | `get_offer_definition_by_id(offerId=<componentOfferId>)` | `catalog-offers` |
-| Search available plans by product type (CES fallback) | `catalog_query_get_offers(datasource, currency, marketId, tags)` | `catalog-query` |
+| List all active curated offer IDs | `get_curated_offers(active=true, limit=1200)` | `catalog-curated-offers` |
+| Search available plans by product type (CES tag search) | `catalog_query_get_offers(datasource, currency, marketId, tags)` | `catalog-query` |
+| Fetch all CES packages with PFID arrays | WebFetch `https://merchandising.api.godaddy.com/v1/packages` | External — public, no auth required |
 
 Run all catalog lookups in parallel where possible. For N package IDs, fire all `get_curated_offer` calls at once. For M component offers within a package, fire all `get_offer_definition_by_id` calls at once.
 
@@ -234,6 +238,8 @@ WHERE item_tracking_code = '{ITC}'
 ORDER BY cln_update_utc_ts DESC;
 ```
 
+---
+
 ### Step A2 — Identify Champions and Gaps
 
 From the audit results:
@@ -244,9 +250,21 @@ From the audit results:
 - Flag: a package_id appearing with multiple discount codes means pricing variants exist
 - Flag: if `item_discount_code` looks like a UUID, no real promo code is active (billing stored the offer ID); if it looks like a readable code (e.g. `DISCWAMBA`, `disc444888`), a real discount is applied
 
-If NES coverage is 0%, the surface is fully CES — proceed to the CES Catalog Fallback section below. Never treat CES as terminal. A Flags table row labeled "CES surface gap" is **not sufficient** — a standalone `⚠ SURFACE IS 100% CES` header section must appear before the Quick Reference blocks, per the rendering rules in the CES Catalog Fallback section. A Flags row may appear in addition, but never instead of the header.
+**Branch decision after Step A2:**
 
-### Step A3 — Catalog Lookup
+| Condition | Next step |
+|---|---|
+| NES coverage > 0% | **Step A2a — NES Path** |
+| NES coverage = 0% | **Step A2b — CES Merchandising Lookup** |
+| Zero rows returned | Stop — ask analyst to verify the ITC or widen the date window |
+
+A mixed surface (NES > 0% but < 100%) follows the NES path (Step A2a). The CES portion is noted in the Flags table as "CES surface gap" but does **not** trigger Step A2b — the surface has a NES champion and the goal is to clone that.
+
+---
+
+### Step A2a — NES Path (Catalog Lookup)
+
+*Runs when NES coverage > 0%.*
 
 For **every distinct non-null `package_id`** from Step A2, run all calls in parallel:
 
@@ -263,7 +281,7 @@ State this classification explicitly in output before any other catalog detail.
 
 ---
 
-**Step 2 — look up the Base Offer (always an Offer Collection):**
+**Step 2 — look up the Base Offer:**
 ```
 get_offer_collection_definition(datasource="catalog-offers", offerCollectionId=<offerId>)
 ```
@@ -295,108 +313,216 @@ Never omit a component. If `prePurchaseKeyMap.offers[]` has 3 entries, make 3 ca
 - **`prePurchaseKeyMap.offers[]`** (from `get_curated_offer`) — the bundled add-on components wired at purchase time. This is the authoritative source for all Component Offer IDs (M365, Titan Email will always be here if they are part of the bundle). Every entry here is required for the ecomm payload.
 - **`offers[]`** (from `get_offer_collection_definition`) — all offers in the collection, including the primary product (labeled `parentOffer` in `offersGrouping`) and any optional add-ons not bundled at checkout (e.g. Norton, upsell seats).
 
-For any `offerId` in `offers[]` that does NOT appear in `prePurchaseKeyMap.offers[]`: look it up with `get_offer_definition_by_id` in the same parallel batch and include it in a separate table labeled **"Additional Offers in Collection (not wired in prePurchaseKeyMap)"**. These are not required for ecomm to clone the bundle, but they must not be silently dropped — they tell ecomm what else is attached to the parent collection.
+For any `offerId` in `offers[]` that does NOT appear in `prePurchaseKeyMap.offers[]`: look it up with `get_offer_definition_by_id` in the same parallel batch and include it in a separate table labeled **"Additional Offers in Collection (not wired in prePurchaseKeyMap)"**. These are not required for ecomm to clone the bundle, but they must not be silently dropped.
 
-Never infer which `offers[]` entries are "unimportant" without looking them up. An entry that looks like a secondary add-on may turn out to be a required geo-variant component.
-
----
+Never infer which `offers[]` entries are "unimportant" without looking them up.
 
 Do this for every distinct package_id, not just the highest-volume one. If 3 package_ids are active, make all catalog calls and present all 3 results side by side.
 
 ---
 
-### CES Catalog Fallback (surface has no package_ids)
+### Step A2b — CES Merchandising Lookup
 
-When the surface audit returns 0% NES coverage, there is no `package_id` to use as a lookup key. Use the catalog query API to find the offer definition for the proposed SKU directly.
+*Runs only when NES coverage = 0%.*
 
-**Step 1 — Query available plans for the product type:**
+The goal is to find CES package slugs from the merchandising API whose `pfids[]` match the surface PFIDs from Step A1 — establishing which named offer configuration was shown on this surface, even though no `package_id` appears in billing.
+
+**Step 1 — Fetch all CES packages:**
+```
+WebFetch https://merchandising.api.godaddy.com/v1/packages
+```
+Returns a JSON array. Key fields per object:
+- `id` — the CES package slug (e.g. `wordpress-basic-ssl-1yr`)
+- `description` — human-readable label
+- `packageType` — e.g. `Standard`, `Premium`
+- `productPackage.products[].pfids[]` — PFIDs included in the primary products
+- `productPackage.addons[]` — optional add-on groups (elective, not wired at checkout)
+
+If the API call fails or returns an empty array, note this in the CES header and go directly to Step A2c Chain Step 2.
+
+**Step 2 — Match surface PFIDs against package pfids[]:**
+
+From the Step A1 surface audit, collect all distinct PFIDs observed on this surface. For each merchandising package, compute the intersection of `productPackage.products[].pfids[]` (from all products in the package) against the surface PFID set.
+
+**Classify each match:**
+
+| Match Type | Definition | Confidence |
+|---|---|---|
+| **Exact** | Package PFIDs == surface PFIDs exactly (same set, no extras, no gaps) | High |
+| **Superset** | Package PFIDs ⊇ surface PFIDs (covers all surface PFIDs plus additional products) | High — flag extras |
+| **Partial** | Overlap but neither is a full subset | Medium — ecomm must confirm scope |
+| **No match** | Intersection is empty | Discard |
+
+**Always render the CES Merchandising Match table** — even if no matches are found (table will be empty):
+
+| Package Slug | Description | Package Type | Package PFIDs | Surface PFIDs Matched | Surface PFIDs Unmatched | Match Type | Surface Orders (7d) |
+|---|---|---|---|---|---|---|---|
+
+Include the "Surface Orders (7d)" column for matched PFIDs from Step A1 results so the analyst can see whether matched packages reflect live traffic.
+
+**Branch decision after Step A2b:**
+
+| Outcome | Action |
+|---|---|
+| One exact match | A2c Chain Step 1 — this package is the primary candidate |
+| One or more superset matches (no exact) | A2c Chain Step 1 — smallest-superset as primary; flag extras |
+| Only partial matches | A2c Chain Step 1 — best partial as primary; mark output BLOCKING — ecomm must confirm scope |
+| No matches at all | Skip A2c Chain Step 1; go directly to A2c Chain Step 2 |
+
+---
+
+### Step A2c — CES Offer ID Resolution
+
+*Runs when NES coverage = 0%. Execute in chain order — stop at the first step that returns a result.*
+
+---
+
+**Chain Step 1 — Merchandising slug → curated offer** *(only if A2b found a match)*
+
+Take the best-match package slug from A2b. Attempt:
+```
+get_curated_offer(datasource="catalog-curated-offers", curatedOfferId=<package_slug>)
+```
+- **Success:** Catalog recognizes this slug as a curated offer. Record the offer. Apply the same Standalone / Offer Collection classification as Step A2a. Chain resolved.
+- **Not found:** Proceed to Chain Step 2.
+
+---
+
+**Chain Step 2 — ID list scan + keyword match**
+
+Pull all active curated offer IDs:
+```
+get_curated_offers(datasource="catalog-curated-offers", active=true, limit=1200)
+```
+
+Derive keywords from:
+1. The target product name or SKU (e.g. "MWP Basic" → `mwp`, `basic`, `wordpress`)
+2. The surface ITC string (e.g. `slp_wordpress` → `wordpress`)
+3. PFID labels from Step A1 results (e.g. PFID 1320706 = "Deluxe Managed Hosting" → `deluxe`)
+
+For each curated offer ID in the list, keyword-match against the ID slug string. Collect all matching IDs and call `get_curated_offer` for each in parallel.
+
+- **Success (one or more offers found whose PFID coverage matches the surface):** Chain resolved. Apply Standalone / Offer Collection classification.
+- **No matches:** Proceed to Chain Step 3.
+
+Disclosure template for ID scan (add to CES header section):
+> "Found `{package_id}` by scanning `{N}` curated offer IDs from `get_curated_offers` for keyword matches on `{keyword list}`. This offer was not found via billing data — confirm with ecomm that this is the correct curated offer before wiring the experiment."
+
+After any Chain Step 2 success, still run Chain Step 3 as a secondary validation to confirm no additional plan variants exist. Render the full candidate table from both steps.
+
+---
+
+**Chain Step 3 — Tag-based search**
+
+Derive product type tags from the surface PFIDs and product names (e.g. `hosting` from MWP, `m365` from Microsoft products, `ssl` from SSL PFIDs). Run:
 ```
 catalog_query_get_offers(
     datasource="catalog-query",
-    currency=<currency from request, e.g. "USD">,
-    marketId=<market from request, e.g. "US">,
-    tags=[<product_type_tag, e.g. "m365", "hosting", "ssl">]
+    currency=<from request>,
+    marketId=<from request>,
+    tags=[<derived product type tags>]
 )
 ```
-This returns a `plans[]` array of all purchasable plans for the given product type and market. Each entry contains a `plan` name field and an `instance.uri` shaped like `/customers/{id}/offers/{offerId}`.
 
-**Step 2 — Filter plan names for the target SKU:**
-Search `plan` names for keywords derived from the ticket's target SKU (e.g. for "Online Essentials w/o Teams": "online", "essentials", "no teams"). Track the total number of plans returned and the number that matched.
+Filter the returned `plans[]` for keyword matches on the plan name field. For each matched plan, extract `offerId` from `instance.uri` (last path segment after `/offers/`) and call `get_offer_definition_by_id` in parallel.
 
-**Step 3 — Extract offer IDs from matched plans:**
-For each matching plan, parse the `offerId` from `instance.uri` — it is the last path segment after `/offers/`.
+- **Success:** Chain resolved via tag search. No curated offer slug is available from this path. The output must include a BLOCKING line: "Found via tag search only — no curated offer slug exists. Ecomm must create a new curated offer and wire this offer ID."
+- **No matches:** Chain exhausted.
 
-**Step 4 — Look up the offer ID:**
-Proceed with `get_offer_definition_by_id` and `get_offer_collection_definition` using the extracted offer ID. Apply the same Standalone / Offer Collection classification rules as the NES path above.
+---
 
-**Step 5 — Disclose the search in output (required):**
+**If all chain steps fail:**
 
-Before the Quick Reference block, include a CES path header and a candidate summary:
+BLOCKING line in the Quick Reference: "No curated offer found via merchandising match, ID scan, or tag search — ecomm must create a new curated offer from scratch. Provide PFID list to ecomm and request offer creation."
+
+---
+
+### CES Output Disclosure Requirements
+
+*Required whenever Steps A2b and A2c ran (NES coverage = 0%). Render all sections in this order, before the Quick Reference blocks.*
+
+**Section 1 — Header (required)**
 
 ```
-**SURFACE IS 100% CES — Catalog Fallback Path**
-
-No package_id exists on this surface. catalog_query_get_offers returned {N} total plans
-for {product_type} in {market}. {M} matched the target SKU keywords ({keyword list}).
+SURFACE IS 100% CES — Catalog Fallback Path
 ```
 
-Then render a candidate table showing all matched plans:
+This must appear as a visible, prominent line. A Flags table row alone is not sufficient.
+
+**Section 2 — Merchandising Match table** (from Step A2b — always rendered, even if empty)
+
+Use the table format defined in Step A2b.
+
+**Section 3 — Chain narrative** (one sentence per chain step attempted)
+
+State which steps were attempted and what each returned:
+- "Chain Step 1: `{package_slug}` matched as a curated offer." or "Chain Step 1: `{package_slug}` not found in catalog."
+- "Chain Step 2: Scanned `{N}` curated offer IDs; `{M}` keyword matches found." or "Chain Step 2: No keyword matches in `{N}` IDs."
+- "Chain Step 3: Tag search on `{tags}` in `{market}` returned `{N}` plans; `{M}` matched SKU keywords." or "Chain Step 3: No matching plans found."
+
+**Section 4 — Candidate table** (from whichever chain step(s) succeeded)
 
 | Plan Name | Offer ID | subscriptionType | Selected |
 |-----------|----------|-----------------|---------|
-| `onlineEssentialsNoTeams` | `575a7d2a-...` | p1nt | ✓ best match |
-| `m365OnlineEssentialsNoTeams` | `575a7d2a-...` | p1nt | same offer ID |
-| `onlineBusinessEssentialsAesNoTeams` | `575a7d2a-...` | p1nt | AES variant |
 
-Rules for the candidate table:
+Rules:
 - Show every matched plan — never suppress candidates.
-- If multiple plans resolve to the same offer ID, note "same offer ID" in the Selected column — this means they are variants of the same underlying offer, not separate offers.
-- If multiple plans resolve to **different** offer IDs, do not silently pick one. Show all and flag plan selection as BLOCKING in the Quick Reference output.
+- If multiple plans resolve to the same offer ID, note "same offer ID" in the Selected column.
+- If multiple plans resolve to different offer IDs, do not pick one — show all and mark plan selection as BLOCKING.
 - Mark the best match with ✓ and a one-word reason (e.g. "best match", "AES variant", "same offer ID").
 
-**When a curated offer is found via `get_curated_offers` ID list scan (not via `catalog_query_get_offers`):**
+Omit this section if the chain was fully exhausted with no candidates found at any step.
 
-If the curated offer is discovered by scanning the `get_curated_offers` ID list (e.g., searching 1,200 IDs for keyword matches on the target SKU name), use this disclosure template in the CES header section instead of the `catalog_query_get_offers` template:
+**Section 5 — CES Package Request Payload** (required whenever any chain step ran)
 
-> No package_id exists on this surface. Found `{package_id}` by scanning `{N}` curated offer IDs from `get_curated_offers` for keyword matches on `{keyword list}`. This offer was not found via billing data — confirm with ecomm that this is the correct curated offer before wiring the experiment.
+This table gives the requester everything needed to file or review a CES package request. One row per PFID × Term combination observed on the surface. Pull all fields from the Step A1 surface audit results plus the A2b/A2c chain output.
 
-After finding the curated offer via list scan, still run `catalog_query_get_offers` as a secondary validation step to enumerate all available plan variants for the target product type. Render the candidate table from those results, marking the already-found curated offer's plan with "found via ID scan" in the Selected column. This confirms there are no competing candidates and documents the search exhaustively. Never skip this secondary validation — a list-scan match is not sufficient evidence that no other plan variants exist.
+| PFID | Product Name | Term | Tier | Discount Code | Existing CES Package | Orders (7d) | Status |
+|------|-------------|------|------|--------------|---------------------|-------------|--------|
 
-**Step 6 — Legacy SKU context (required on CES path when a curated offer is found or created):**
+Column definitions:
+- **PFID** — `pf_id` from billing
+- **Product Name** — `product_name` from billing (full billing label, not marketing shorthand)
+- **Term** — `product_term_num` + `product_term_unit_desc` combined (e.g. "1 Year", "2 Year", "1 Month")
+- **Tier** — `product_pnl_subline_name` from billing (e.g. "Basic", "Deluxe", "Ultimate"). If null, fall back to `product_pnl_line_name`.
+- **Discount Code** — `item_discount_code` from billing. If it looks like a UUID, write "None (UUID placeholder)". If it looks like a real code (e.g. `DISCWAMBA`), write the code verbatim.
+- **Existing CES Package** — CES package slug from Step A2b/A2c. Use these labels by chain outcome:
+  - Chain Step 1 success: `Confirmed — {slug}`
+  - Chain Step 2 success (ID scan): `Candidate — {slug} (confirm with ecomm)`
+  - Chain Step 3 only: `Tag search only — no slug available`
+  - Chain exhausted / no match: `Not found`
+- **Orders (7d)** — `SUM(total_orders)` for this PFID × Term from Step A1
 
-From the Step A1 surface audit results, identify all PFIDs in the same product category as the new offer. Render this table before the Quick Reference blocks, immediately after the CES header and candidate table:
-
-| PFID | Product Name | Term | Total Orders (7d) | New Orders (7d) | Avg Catalog Sale Price | Status |
-|------|-------------|------|--------------------|-----------------|----------------------|--------|
-
-Label each PFID:
-- Highest-volume PFID in the category that is **not** named in the ticket as a removal target → `Entry champion (stays)`
+Label each row in the Status column:
+- Highest-volume PFID in the category that is not a removal target → `Entry champion (stays)`
 - PFIDs explicitly named in the ticket as being removed → `Being replaced`
-- PFIDs whose disposition is unclear from the ticket → `Legacy CES — confirm disposition with ecomm`
-- Multi-year or monthly variants of a SKU where the ticket specifies annual only → `Scope unclear — confirm with ecomm`
+- PFIDs whose disposition is unclear → `Legacy CES — confirm disposition with ecomm`
+- Multi-year or monthly variants where the ticket specifies annual only → `Scope unclear — confirm with ecomm`
 
-Never omit a row because the volume seems low. A pricing engineer acting on incomplete scope will misconfigure the replacement.
+Never omit a row because the volume is low. A pricing or ecomm engineer acting on incomplete scope will misconfigure the request.
+
+---
 
 ### Path A Output
 
-**Default output is the Quick Reference only.** Do not render supporting detail unless the analyst asks for it with a phrase like "show me the full audit", "give me the detail", or "expand".
+**Render only after all work is complete.** For the NES path: after all `get_curated_offer`, `get_offer_collection_definition`, and `get_offer_definition_by_id` calls have returned. For the CES path: after the merchandising fetch, all chain steps, and all catalog calls that chain steps triggered have returned. Do not render any section of the output until every call is done.
 
-The output has two tiers:
+**Default output is the Quick Reference only.** Do not render supporting detail unless the analyst asks with a phrase like "show me the full audit", "give me the detail", or "expand".
 
 | Tier | When rendered | Content |
 |------|--------------|---------|
-| **Quick Reference** | Always, by default | One table per bundle — the complete ecomm payload, nothing else |
+| **Quick Reference** | Always, by default | One block per bundle — the complete ecomm payload |
 | **Supporting Detail** | Only on request | Surface volume table + per-bundle catalog deep-dive |
 
 ---
 
 **Quick Reference (always rendered)**
 
-Emit one block per distinct `package_id`. Open each block with a header line `=== {bundle_slug} ===`, then emit a labeled record block. Labels left-aligned, padded to match the longest label in the block. Values on the right of the colon. Fields in this order:
+Emit one block per distinct `package_id` (or per resolved offer on the CES path). Open each block with a header line `=== {bundle_slug} ===`, then emit a labeled record block. Labels left-aligned, padded to match the longest label in the block. Values on the right of the colon. Fields in this order:
 
 ```
 === {bundle_slug} ===
-Clone Source (Package ID)  :  {package_id}
+Clone Source (Package ID)  :  {see Clone Source rules below}
 Base Collection ID         :  {offerId} from get_curated_offer
 Component 1 — {Name}      :  {offerId} / plan: {plan}
 Component 2 — {Name}      :  {offerId} / plan: {plan}
@@ -408,33 +534,40 @@ Volume                     :  {N} orders/7d on {itc} ({NES_pct}% NES)
 BLOCKING                   :  One sentence. Omit this line entirely if nothing blocks ecomm from proceeding.
 ```
 
-When multiple bundles are stacked, separate each block with a blank line between the last field line and the next `=== {bundle_slug} ===` header.
+**Clone Source rules by path:**
+- NES path (A2a): `{package_id}` from billing data — authoritative slug
+- CES path, Chain Step 1 success: merchandising package slug confirmed as a curated offer
+- CES path, Chain Step 2 success: curated offer slug found via ID scan
+- CES path, Chain Step 3 only: `N/A — found via tag search only; ecomm must create curated offer`
+- CES path, chain exhausted: `N/A — new offer required`
 
-Field rules:
+**Field rules:**
 - One Component line per entry in `prePurchaseKeyMap.offers[]`. Use the component's `name` from `get_offer_definition_by_id` as the label. Never omit a component.
 - For Standalone Offers: omit all Component lines. Base Collection ID is the complete payload.
-- If a component's `plan` is absent from its `prePurchaseKeyMap` entry: write `NOT SPECIFIED — ecomm must confirm` as the value and include a BLOCKING line.
+- If a component's `plan` is absent: write `NOT SPECIFIED — ecomm must confirm` and include a BLOCKING line.
 - If a component lookup failed: write `{raw offerId} — lookup failed, verify manually`.
 - Never add placeholder lines. Omit lines that do not apply.
-- No prose before or after the Quick Reference blocks — except when the CES Catalog Fallback path ran, in which case the required CES header and candidate table precede the Quick Reference blocks.
+- No prose before or after the Quick Reference blocks — except the required CES disclosure sections when the CES path ran.
 
-After all Quick Reference blocks, append a Flags table. Include one row per condition that applies. Omit the table entirely if there are no flags.
+When multiple bundles are stacked, separate each block with a blank line between the last field line and the next `=== {bundle_slug} ===` header.
+
+After all Quick Reference blocks, append a Flags table. One row per condition that applies. Omit the table entirely if no flags apply.
 
 | Flag | Detail |
 |------|--------|
 | A/B test likely | 2 bundles active on `{itc}` simultaneously — confirm champion with ecomm before cloning |
 | M365 geo risk | Component `{name}` has `m365` tag — confirm availability for `{market}` before cloning |
-| CES surface gap | `{itc}` (`{N}` orders/7d) is 100% CES — no package_id exists on this surface to clone |
+| CES surface gap | `{itc}` (`{N}` orders/7d) has no `package_id` — these orders are CES and not covered by the NES champion |
 | Discount code conflict | `{itc}` has existing code `{code}` that would be overridden |
 | Plan not specified | Component `{name}` has no plan in `prePurchaseKeyMap` — ecomm must confirm |
 
-*(Show only the rows that apply. Do not show example rows. Omit the table entirely if nothing flags.)*
+*(Show only rows that apply. Do not show example rows. Omit the table entirely if nothing flags.)*
 
 ---
 
 **Supporting Detail (render only when the analyst asks)**
 
-When the analyst requests detail, append the following after the Quick Reference. Do not render it by default.
+When the analyst requests detail, append after the Quick Reference. Do not render by default.
 
 **Surface Volume**
 
@@ -449,7 +582,7 @@ One block per bundle. Open with the bundle slug as a heading.
 
 State the offer type first as a single bolded line: `Offer Collection — N bundled components.` or `Standalone Offer — single product, single plan.`
 
-Then render the catalog details as a labeled record block. Labels left-aligned, padded to match the longest label in the block. Values on the right of the colon:
+Then render catalog details as a labeled record block:
 
 ```
 === {bundle_slug} ===
@@ -622,9 +755,25 @@ From the results, identify:
 
 > **Call out explicitly:** If a discount code is meant to apply to a specific package_id and that package_id appears on more ITCs than the ticket specifies, surface those additional ITCs. Pricing team needs to decide whether to widen scope or restrict via ITC filtering.
 
+**CES ITC handling (Blast Radius Mode only):**
+
+For each distinct ITC that has CES-only rows (all `package_id` values null), run a lightweight CES slug lookup to give the pricing team a reference for discount code configuration:
+
+1. **Merchandising match (Step A2b logic):** Fetch `https://merchandising.api.godaddy.com/v1/packages`. Match the ITC's PFID set against `pfids[]` in each package. Classify as Exact, Superset, or Partial.
+2. **ID list scan (Step A2c Chain Step 2 only):** If no merchandising match, scan `get_curated_offers` ID list for keyword matches. Do **not** run Chain Step 3 (tag search) for Path B — pricing tickets do not require full offer classification.
+
+Assign a confidence level per ITC:
+- **High** — exact PFID match from merchandising API
+- **Medium** — superset/partial merchandising match, or ID list scan keyword match
+- **None** — all steps failed
+
+The goal is a slug reference for discount configuration, not a full offer classification. Document findings in the CES Offer Candidates table in the output.
+
 ---
 
 ### Path B Output
+
+**Render only after all work is complete.** After the Step B0/B1 queries have returned and, if CES ITCs are present, after the Step B2 merchandising fetch and ID scan have returned. Do not render any section of the output until every call is done.
 
 Output format depends on the mode used in Step B1.
 
@@ -632,7 +781,7 @@ Output format depends on the mode used in Step B1.
 
 #### PFID Inventory Mode Output
 
-Before the PFID table, render a Flags table for any of the following conditions that apply. Omit the table entirely if nothing flags.
+Before the PFID table, render a Flags table for any of the following conditions. Omit entirely if nothing flags.
 
 | Flag | Detail |
 |------|--------|
@@ -644,17 +793,16 @@ Before the PFID table, render a Flags table for any of the following conditions 
 
 | PFID | Product Name | Term | Existing Orders | New Orders | Avg US Receipt Price | Avg US Regular Price | Avg US List Price | Avg US Catalog Sale Price |
 |------|-------------|------|----------------|-----------|---------------------|---------------------|------------------|--------------------------|
-| ... | ... | ... | ... | ... | ... | ... | ... | ... |
 
 End with a one-line count: "N PFIDs across M term lengths."
 
-This table is the ticket payload. If a term length is missing, a pricing engineer will configure the wrong PFID set. When in doubt, include the row and let the analyst exclude it.
+This table is the ticket payload. When in doubt, include the row and let the analyst exclude it.
 
 ---
 
 #### Blast Radius Mode Output
 
-Before the PFID × ITC table, render a Flags table for any of the following conditions that apply. Omit the table entirely if nothing flags.
+Before the PFID × ITC table, render a Flags table for any of the following conditions. Omit entirely if nothing flags.
 
 | Flag | Detail |
 |------|--------|
@@ -667,20 +815,37 @@ Before the PFID × ITC table, render a Flags table for any of the following cond
 
 | PFID | Product Name | Term | ITC | Package ID | Offer Type | Current Discount Code | Total Orders (30d) | Avg Receipt Price | Avg List Price | Avg Catalog Sale Price |
 |------|-------------|------|-----|-----------|------------|----------------------|-------------------|-----------------|---------------|----------------------|
-| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+**CES Offer Candidates** *(rendered only when one or more ITCs are CES-only and the Step B2 CES lookup ran)*
+
+| ITC | PFID | Product Name | Term | Tier | Discount Code | Existing CES Package | Found Via | Confidence |
+|---|---|---|---|---|---|---|---|---|
+
+One row per **PFID × Term** combination within each CES ITC — not one row per ITC. A surface with multiple PFIDs or term lengths produces multiple rows. If no CES ITCs exist, omit this table entirely.
+
+Column definitions:
+- **Term** — `product_term_num` + `product_term_unit_desc` combined (e.g. "1 Year", "2 Year")
+- **Tier** — `product_pnl_subline_name` from Step B1 results. If null, use `product_pnl_line_name`.
+- **Discount Code** — `item_discount_code` from Step B1 results. UUID placeholder → write "None".
+- **Existing CES Package** — slug from merchandising match or ID scan. Write "Not found" if both steps failed.
+- **Found Via** values: `Merchandising — exact`, `Merchandising — superset`, `Merchandising — partial`, `ID scan`, `—` (none found)
+- **Confidence**: `High` (exact merchandising match), `Medium` (superset/partial match or ID scan), `None` (all steps failed)
 
 **Discount Ticket Summary**
 
-Render as a labeled record block. Labels left-aligned, padded to match the longest label. Values on the right of the colon. Populate every field from query results. Write "None" or "N/A" if a field genuinely does not apply.
+Labeled record block. Labels left-aligned, padded to match the longest label. Every field populated from query results. Write "None" or "N/A" if a field genuinely does not apply.
 
 ```
 === Discount Ticket Summary ===
 PFIDs to include          :  {pfid1}, {pfid2}, ...
 Package IDs (NES)         :  {package_id1}, {package_id2}, ... (or "None — CES only")
+CES Slug Candidates       :  {slug} on {itc} (unconfirmed — see CES Offer Candidates table above); or "None found"
 ITCs in scope             :  {itc1}, {itc2}, ...
 Price baseline            :  PFID {pfid} → avg receipt ${price} / avg list ${list} per term; ...
 Existing codes to replace :  {code} on {itc} / PFID {pfid}; or "None"
 ```
+
+The `CES Slug Candidates` line is **omitted entirely** if the surface is 100% NES or if Path B ran in PFID Inventory Mode.
 
 ---
 
