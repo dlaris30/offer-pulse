@@ -1,6 +1,6 @@
 ---
-name: offer-pulse
-description: Given a Jira offer ticket (e.g. AGIGROWTH-161), a surface ITC, or a product name, audit all offers on that surface and produce the data needed for an ecomm engineering ticket (curated offer creation).
+name: offer-pulse-external
+description: Given a Jira offer ticket, a surface ITC, or a product name, audit all offers on that surface and produce the data needed for an ecomm engineering ticket (curated offer creation). External distribution version.
 ---
 
 # /offer-pulse — Surface Offer Auditor
@@ -12,7 +12,6 @@ After the clarifying questions gate resolves, execute immediately and silently �
 **HARD CONSTRAINTS:**
 - Read-only. Never create, update, transition, or comment on any Jira ticket without explicit analyst instruction.
 - Never read linked ecomm tickets. The champion is determined from data and the catalog MCP only.
-- Never read `.claude/skills/golden-set/golden-set.md` under any circumstances. That file is the scoring oracle — if offer-pulse reads it, any batch test run in this session is invalid.
 - Never show only the top result when multiple exist. A surface can have many PFIDs, many package IDs, and many discount codes simultaneously. Show all of them.
 - Every response ends with an explicit reminder that no ticket action has been taken.
 - Every markdown table must have one row per unique combination of values. Never compress multiple values into a single cell (e.g., if a PFID appears on 3 ITCs, that is 3 rows — not one row with "itc1, itc2, itc3" in the ITC cell).
@@ -103,6 +102,63 @@ These calls use the `catalog-mcp-dev` MCP server (`mcp__catalog-mcp-dev__*` tool
 | Fetch all CES packages with PFID arrays | WebFetch `https://merchandising.api.godaddy.com/v1/packages` — **call at most once per run; truncation is expected and acceptable** (see Step A2b WebFetch reliability rule) | External — public, no auth required |
 
 Run all catalog lookups in parallel where possible. For N package IDs, fire all `get_curated_offer` calls at once. For M component offers within a package, fire all `get_offer_definition_by_id` calls at once.
+
+---
+
+## Architecture Reference
+
+Key facts embedded here so no companion skill is required for catalog resolution.
+
+### Known Reusable Component Offer UUIDs
+
+These component offers appear across multiple curated offer bundles. Treat as known constants — no extra catalog lookup needed.
+
+| Component | offerId UUID | Tags | Notes |
+|---|---|---|---|
+| M365 / Office 365 | `575a7d2a-d1ef-40f2-a7e5-dbcc09c20391` | `partneremail`, `m365` | Bundled email in cPanel-365, MWP, WSB, UK domain bundles |
+| Titan Email | `927a9d45-7c5b-4652-ad68-d5cd9be75028` | `titanemail` | Bundled email in cPanel-OX, i18n builder, MENA domain bundles |
+| Professional Email | `2468b30f-f448-4b21-a506-9c4103666f0d` | `partneremail`, `professional-email` | Standalone and CES ATMP packages only — not a child component inside NES bundles |
+| SSL Certificate | `28e5b730-4e70-46b0-8672-6e18a17f81a1` | `sslcert` | Standalone offer AND child component in VPS4 and cPanel bundles |
+| VPS4 Hosting | `d29f7b62-9766-43bc-b230-353579eaad9c` | `vps4` | Virtual Private Server v4 |
+| cPanel Business Hosting | `05730877-89bd-49c0-8fff-c9880b743bf0` | `diablo` | cPanel hosting; `diablo` tag = machine-migrated from CES |
+| WAM / Websites & Marketing | `d9e7bde4-7b28-49b3-b2fd-5dc528ab8062` | `wam`, `wsb` | US WAM |
+| WAM International | `862a92dc-879f-4148-b43d-5c98898754c4` | `wsb`, `wam` | AU/CA/UK/international DPP domain bundles |
+| NewDomain | `edf13c43-7d39-4f90-aa81-b40666d51f75` | `new-domain-offer` | Domain registration component in DPP bundles |
+| Duda | `2c5e3bb2-e6dc-4b13-855e-36b148cc98fd` | `duda` | Website builder; MENA region bundles only |
+| Smart Line | `89973c51-aacd-49a7-bcf8-876ff0e425b8` | — | Telephony; appears in US DPP tier-6 domain bundle |
+
+**M365 (`575a7d2a`) and Titan Email (`927a9d45`) are the two universal email building blocks.** Same component UUID; context differs by bundle.
+
+### Ghost-ID Prefix Patterns
+
+Certain `package_id` prefixes are always NOT FOUND across all catalog datasources. Do not retry or block on these — classify immediately:
+
+| Prefix | Example | Behavior |
+|---|---|---|
+| `nes-` | `nes-cpanel-set-1-economy-ssl-365-wss-xtra` | Page emits `nes-{slug}` as the pkgid field. Strip the `nes-` prefix and look up the clean slug in catalog. If the clean slug is also NOT FOUND, then classify as ghost. |
+| `offer-` | `offer-airo-builder-professional` | Always NOT FOUND. May be experiment IDs or retired offers. |
+| `_NNNmo` suffix | `wsb_vnext_tier2_060mo` | CES merch-package aliases. Suffix encodes a term override. Look up in `merch-packages` datasource, not `catalog-curated-offers`. |
+
+When a `get_curated_offer` returns NOT FOUND: (1) if slug starts with `nes-`, strip prefix and retry with clean slug before classifying as ghost; (2) check `offer-` ghost prefix, (3) check if it is a `_NNNmo` term alias in `merch-packages`, (4) check if it is a retired offer still referenced in old event data.
+
+### apiVersion 2 vs apiVersion 3
+
+| | apiVersion 2 | apiVersion 3 |
+|---|---|---|
+| Component reference | `offersGrouping` + `prePurchaseKeyMap` with explicit UUIDs | `offerIds[]` array |
+| Components resolvable? | Yes — via `get_offer_definition_by_id` | No — referenced UUIDs return NOT FOUND via V2 endpoint |
+| Behavior for offer-pulse | Full decomposition possible | Treat as Standalone — curated offer slug is the only anchor |
+
+### Known Free Add-on PFIDs
+
+These appear as `purchaseType=Free` entries inside CES packages. Useful for PFID-matching on the CES path:
+
+| PFID | Product | Notes |
+|---|---|---|
+| 3604 | Standard SSL 1yr free | Appears in virtually every hosting package |
+| 464069 | M365 OfficeBusiness Ps free trial 1yr | WSB, cPanel-365, Business Hosting-365 packages |
+| 1192198 | OX Professional Email Startup free 1yr | cPanel-ox variants |
+| 965772 | GoDaddy Workspace email free tier | WordPress Workspace packages |
 
 ---
 
@@ -319,6 +375,9 @@ Question: "Which billing term(s) should this cover? (e.g. 1 Year, 2 Year, 3 Year
 - **Specific term(s) given** (e.g. "1-year" or "1-year and 2-year"): add `AND product_term_num = {N} AND product_term_unit_desc = '{unit_lowercase}'` to **Step A1 only. Do NOT add this filter to Step B0 or Step M1** — those steps enumerate the complete PFID universe and must run without term restriction (see HARD CONSTRAINT in each). `{unit_lowercase}` is always lowercase: `'year'`, `'month'`, `'quarter'`. When multiple terms are specified, use `AND (product_term_num, product_term_unit_desc) IN (({N1}, 'year'), ({N2}, 'month'))` — lowercase values only.
 
   **HARD CONSTRAINT — no scoping filter (term, segment, or volume) EVER applies to Step B0 or Step M1.** These are PFID discovery steps — their job is to enumerate the complete product universe across all terms and segments. Applying a term filter, a `new_customer_orders > 0` filter, or a volume minimum at this stage produces an incomplete PFID list, which causes entire bundles to be silently missed downstream. These filters belong exclusively in the experiment query (Step A1).
+
+  **1-year anchor query:** When a specific non-1-year term is identified, also run a parallel Step A1 query for 1-year (`product_term_num = 1 AND product_term_unit_desc = 'year'`). Reason: for NES curated offers, the base offer ID is term-agnostic — the 1-year row typically has the highest billing volume and most reliably confirms the correct base offer ID and plan. If the identified term is already 1-year, no extra query is needed. This supplemental run applies to Step A1 only — the HARD CONSTRAINT above is unchanged. Never use this rule to assume the term is 1-year; the term must still be identified from the ticket, inferred from signals, or asked as D5.
+
 - **"All terms" or "unknown":** Do not filter. Run all queries without a term filter, but **group and display term as a first-class column** in every result table and every output block. Note clearly at the top of the output: "TERM SCOPE: All terms — output includes mixed-term results. Champion and PFID lists are not scoped to a single term; confirm the correct term with the analyst before filing the ticket."
 - **Term stated in the Jira ticket:** extract it from the ticket body and skip the question. If the ticket body is ambiguous (e.g. "annual" could mean 1-year or 12-month), list both interpretations and ask for confirmation before running queries.
 
@@ -456,18 +515,84 @@ If the analyst resolves all questions in a single reply, proceed immediately. If
 
 ## Surface Name → ITC Map
 
-| Ticket language | Exact ITC | LIKE filter |
-|---|---|---|
-| Pre-Check, PreCheck, DPP | `dpp_precheck` | `LIKE 'dpp_%'` |
-| Precheck, Pre-Check (without "dpp_" prefix) | `dpp_precheck` | `WHERE item_tracking_code = 'dpp_precheck'` |
-| Sales Landing Page, SLP | varies | `LIKE 'slp_%'` |
-| Front of Site, FOS, "front of site" | varies | `LIKE 'slp_%'` — FOS refers to Sales Landing Pages, not Domain Purchase Path. Do not map FOS to `dpp_*`. |
-| Domain Landing Page, DLP | varies | `LIKE 'dlp_%'` |
-| Upgrade Path, UPP | varies | `LIKE 'upp_%'` |
-| Dashboard, Manage, MGR | varies | `LIKE 'mgr_%'` |
-| Cart | varies | `LIKE 'cart_%'` |
+### Known Surfaces
 
-If only a surface category is given (e.g. "the SLP"), use the LIKE pattern. Show all matching ITCs ranked by total_orders — do not pick one and discard the rest.
+Key surfaces for offer-pulse use cases. Volume figures as of 2026-05-15.
+
+| ITC | Human label | NES/CES | Top packages / notes |
+|---|---|---|---|
+| `slp_wordpress` | WordPress Hosting Sales Page | NES | `wordpress-o365-forever-ssl-deluxe`, `wordpress-openexchange-forever-ssl-deluxe`, `wordpress-o365-forever-ssl-basic` — 100% package attachment |
+| `slp_hosting_4gh` | cPanel Hosting Sales Page (4GH) | NES | `cpanel-o365-tier1/2/3`, `cpanel-set-1-economy-ssl-365-xtra` |
+| `slp_pro_managed_wordpress_hosting` | Pro Managed WordPress Hosting Sales Page | NES | MWP Pro tier |
+| `slp_hosting_category` | Hosting Category Sales Page (VPS/Server) | Mixed | NES: `vps4-self-managed-*` packages; CES: WordPress, M365, cPanel rows |
+| `slp_ssl` | SSL Certificate Sales Page | NES | `ssl-001sites-tier1/2/managed/wildcard` all → offerId `28e5b730`; `ssl-001sites-tier3` → `bb0afea9` |
+| `slp_365_category` | Email / M365 Category Sales Page | CES | Titan Email (70%) + M365 (30%) — no package IDs |
+| `slp_365_category_config` | M365 Category — Seat Configuration Step | CES | M365 seat selector — no package IDs |
+| `slp_airo` | Airo AI Website Builder Sales Page | NES | Domain-focused; champion: `domain` → `edf13c43` |
+| `slp_rstdstore` | Standard / Shared Hosting Store | CES | No package IDs — confirmed CES |
+| `dpp_precheck` | Domain Checkout Pre-Check (Add-on Step) | Mixed | NES for email essentials: champions `temp-email-essentials-99`, `temp-email-essentials-149` (live production — `temp-` slugs are not test artifacts). CES-dominant for non-email products. |
+| `dpp_config1` | Domain Checkout — Add-on Configuration Step | CES | Email + DOP upsell at checkout — no package IDs |
+| `dpp_absol1` / `dpp_absol1.*` | Domain Registration Checkout (all variants) | NES | All `dpp_absol1.*` experiment variants share the same champion: `domain` → `edf13c43` |
+| `dlp_domain` | Domain Landing Page | NES | Champions: `domain` → `edf13c43`; `dbs` → `0ce223ed` |
+| `dlp_wordpress_hosting` | WordPress Hosting Domain Landing Page | NES | MWP product |
+| `dlp_usoybo` | US OYBO Domain + Email Bundle Landing Page | NES | Champion: `oybo-en-email` → `e328092f` — domain + M365 bundle |
+| `mya_dom_srch` / `mya_dom_srch.*` | My Account Domain Search (all variants) | NES | All `mya_dom_srch.*` experiment variants share champion: `domain` → `edf13c43` |
+| `single_product_renewal` | Single Product Renewal | CES | All products, all null packages — pure CES renewal surface |
+| `notifications_bell` | Notification Bell Renewal / Upsell | CES | All null packages — pure CES |
+| `upp_*` (all) | Upsell / Upgrade Path | CES | 100% CES across all upp_ surfaces — not on migration roadmap. Do not attempt curated offer resolution. |
+
+**FOS requires clarification.** "Front of site" and "FOS" are broad terms covering SLP (`slp_*`), cart, precheck (`dpp_precheck`), and checkout — they do NOT map exclusively to `slp_*`. When a ticket uses "FOS" without a sub-surface qualifier, always check `customfield_34656` first. If that field is absent or ambiguous, ask which sub-surface is intended before querying. Never auto-route FOS to `slp_*`. See D4 for the full clarification flow.
+
+If only a surface category is given (e.g. "the SLP"), query with `LIKE 'slp_%'` and show all matching ITCs ranked by total_orders — do not pick one and discard the rest.
+
+---
+
+### Prefix Fallback (for ITCs not in the table above)
+
+| ITC prefix / pattern | Surface family | Expected NES/CES | Guidance |
+|---|---|---|---|
+| `slp_*` | Sales Landing Page (SLP) | Mixed — check CLN | Hosting (4GH, MWP, Pro MWP) and SSL are NES. M365, WAM, and most others are CES. Query CLN for package_id null-rate to confirm. |
+| `slp-*` (hyphen), `hmc_*`, `lp_*`, `plp_*`, `mlp_*`, `_lp` suffix | SLP-family variants | Mixed — check CLN | Same routing logic as `slp_*`. Check CLN for package_id presence before assuming CES. |
+| `dpp_*` with `.primary_*`, `.unavailable_*`, `.aftermarket_*`, `.smartdefault_*` suffix | Domain checkout experiment variant | NES | dpp_absol1 family — same `domain` champion (`edf13c43`). |
+| `dpp_*` without experiment suffix | Domain checkout step | CES | `_config`, `_reoffer`, `_transfers` variants are CES add-on or re-offer steps. |
+| `_dpp` suffix / contains, `bulk_search` exact | Domain Purchase Path non-prefix variants | Mixed — check CLN | These route to the DPP group per source of truth. Query CLN for package_id null-rate. |
+| `dlp_*` | Domain Landing Page (DLP) | NES (typically) | Standard domain family. Confirm via CLN. |
+| `upp_*` | Upsell / Upgrade Path (UPP) | CES | 100% CES. No NES migration planned. Skip curated offer resolution. |
+| `mya_*` | My Account (MYA) | Mixed | `mya_dom_srch.*` variants are NES (domain). `mya_acctsettings_*` and renewal flows are CES. |
+| `renewal` contains, `mui_*` | My Account — renewal / UI extension | CES | Covers `account_myrenewals_*`, `single_product_renewal`, `mui_*` — all MYA group, all CES. |
+| `dcc` contains, `whois_serp*`, `whoisserp*` | Domain Control Center (DCC) | Mixed | `dcc` is a **contains** match. Domain search surfaces are NES; portfolio renewal and DOP flows are CES. **Do not confuse with `ddc_*`** (Domain Discount Club — separate group below). |
+| `ddc_*` | Domain Discount Club (DDC) | CES | Distinct from DCC. `ddc_pro_01` = DDC; `dcc_portfolio_renewal` = DCC. All DDC surfaces are CES. |
+| `cart_*`, `misc-purchase` contains, `xsell` contains | Cart (CART) | Mixed | NES for domain-search cart boxes (e.g. `cart_bottom_expresssearch`). CES for inline cross-sells (`cart_xsells_inline`, `misc-purchase`). |
+| `vh_*`, `ai_onboarding_*`, `airohq*`, `dpp_bundling_is` exact | Venture Home (VH) | CES | AGI-managed. Not on NES migration path. Skip curated offer resolution. |
+| `hp_*` | Homepage Quickbuy (HP) | Mixed — check CLN | Performance marketing. Query CLN for package_id presence. |
+| `mgr_*`, `crm_*`, `shared_shopping_service` exact | C3 Sales Site / Reseller | CES | Internal sales tool surfaces — all CES. |
+| `pro_*`, `wp_*` | GoDaddy Pro / Web Pro Microsite | CES | `wp_` = Web Pro microsite (NOT WordPress). All CES. For WordPress hosting surfaces use `slp_wordpress`, `dlp_wordpress_*`, etc. |
+| `mui_*` | My Account UI extension | CES | Part of the MYA group. |
+| `app_*` | In-app product surface (GDAPP) | CES | In-product upgrade / add-user flows — all CES. |
+| `studio_*`, `android_*`, `ios_*`, `mob_*` | GDAPP — Mobile / Studio | CES | GoDaddy mobile apps and Studio. All CES. |
+| `am_*`, `parked` contains, `tdfs` contains, `buynow` contains | Aftermarket (AM) | n/a | Cash-parking and marketplace surfaces. Not standard purchase surfaces. Do not attempt offer resolution. |
+| `auction_*`, `gdc_*` | After Checkout Special (ACS) | CES | Post-checkout surfaces. Rarely the target for curated offer creation. |
+| `gocentral` contains | P&C — Website Builder (GoCentral / vNext) | CES | Classic website builder surfaces. Distinct from current WAM product. |
+| `netgdpipeline_*`, `dna_*` | Internal pipeline / aftermarket | n/a | Not customer-facing purchase surfaces. Do not attempt offer resolution. |
+
+### Naming Pattern Hints
+
+Use these to interpret an unfamiliar ITC before querying:
+
+| Pattern in ITC slug | Meaning |
+|---|---|
+| `_f2p_` | Free-to-paid conversion → CES |
+| `_p2p_` | Paid-to-paid plan change → CES |
+| `_d2p_` | Domain-to-product in-app journey → CES |
+| `_config` | Configuration step in a flow → usually CES |
+| `_reoffer` | Re-offer / alternative suggestion step → CES |
+| `.primary_exact`, `.primary_organicspin`, `.primary_tldcard`, `.primary_paidspin` | dpp_absol1 or mya_dom_srch experiment routing suffix → NES domain family |
+| `.unavailable_*`, `.aftermarket_*`, `.smartdefault_*` | dpp_absol1 or mya_dom_srch experiment routing suffix → NES domain family |
+| `_365`, `_o365` | M365 email surface → typically CES |
+| `_wordpress`, `_mwp` | Managed WordPress surface → check CLN; may be NES |
+| `temp-` prefix in a package_id | Live production champion — not a test artifact |
+
+If an ITC is not matched by any of the above: query CLN directly for package_id null-rate to determine NES/CES routing. Never block execution on a vocab miss.
 
 ---
 
@@ -493,31 +618,6 @@ left column of this table.
 - `dlp_domain` is a standalone domain landing page → does NOT expand
 - `dlp_usoybo` is a standalone email bundle page → does NOT expand
 - Only ITCs in the confirmed-pairs table above trigger the expansion
-
----
-
-### Surface Vocabulary Fallback
-
-If the input surface name does **not** match any entry in the Surface Name → ITC Map above **and** is not an exact ITC string (e.g. does not follow the `prefix_slug` format):
-
-1. Read `.claude/skills/surface-vocab/surface-vocab.md`
-2. Search `Human label` and `Products` fields of full-profile `## [ITC]` entries first
-3. Fall back to the Bulk ITC Reference Table if no full-profile match
-4. Use the matched ITC(s) for all subsequent query steps
-
-If the vocab file returns multiple matches, show them to the analyst and ask which surface to proceed with before running queries.
-
-If zero matches: note `Surface not found in vocabulary — run /surface-vocab explore or provide an exact ITC` and ask the analyst to clarify before proceeding.
-
-Bulk table matches are low-confidence — if the ITC is resolved from the bulk table, add `(surface label confidence: low — run /surface-vocab explore to promote to full profile)` to the output.
-
-**Surface vocab enrichment (runs after any ITC is resolved — from the map above, vocab fallback, or direct analyst input):**
-
-Once the ITC is resolved by any method, look it up in `surface-vocab.md` and extract:
-- `surface_label` — the `Human label` field from the `## [ITC]` profile (e.g. `Domain Purchase Path — Pre-Check`)
-- `surface_nes_ces` — the `NES / CES` field from the profile (values: `NES`, `CES`, `Mixed`, or `CES (NES in progress)`)
-
-Store both values in working state. Use them in output as specified in the Route Lock and CES-ONLY SURFACE disclosure sections below. This lookup is silent — if the ITC is not found in the vocab (rare edge case), omit the label annotation and proceed without error. Never block execution on a vocab miss.
 
 ---
 
@@ -803,26 +903,17 @@ Before calling `get_curated_offer` on any `package_id` value from Step A2, class
 
 ---
 
-### Step A2a-PC — Package Catalog Pre-Check
+### Step A2a — Geometry Classification (Live Catalog Lookup)
 
-*Runs after the Pre-classification filter in Step A2a, before any `get_curated_offer` call. Applies only to slugs that survived the filter (not CES term-aliases, not ghost IDs).*
+*Runs for all slugs that survived the Pre-classification filter. Geometry is derived live from the catalog MCP response — no pre-classification file is used.*
 
-Read `.claude/skills/package-catalog/catalog.md`. For each surviving `package_id`, look up the slug in the `package_id` column. Apply the branch below based on the result.
+**Free trial detection (slug-level pre-check — runs before any `get_curated_offer` call):**
 
-**Lookup branches:**
+Inspect each surviving slug before making catalog calls:
+- Slug contains `FreeTrial` or `freetrial` (case-insensitive) → pre-flag as candidate free trial
+- BPO fields (`trialDays`, `billingStartEvent`, `billingPeriod`) present in the subsequent `get_curated_offer` response → confirmed free trial
 
-| Condition | Action |
-|---|---|
-| `geometry = standalone` | Geometry pre-confirmed. Proceed to `get_curated_offer` to retrieve the Offer ID and Plan. No geometry re-derivation needed from the catalog response — trust the catalog column. |
-| `geometry = bundle` | Geometry pre-confirmed as Offer Collection. Proceed to `get_curated_offer` to retrieve component UUIDs via `prePurchaseKeyMap`. Note: if the catalog response contains `offerIds[]` instead of `prePurchaseKeyMap` / `offersGrouping`, component resolution is not possible (apiVersion 3 pattern) — flag as `Bundle — components not resolvable (V3)` and halt component lookup for this slug. |
-| `geometry = unknown` AND `catalog_verified` value contains `NOT_FOUND` | This slug was not found in the test catalog. It may exist in production only. Proceed with `get_curated_offer` regardless — never skip the live call for `unknown` entries. No special output flag is required unless the call also returns NOT_FOUND. |
-| Slug is not present in catalog.md | New or unclassified slug. Proceed with `get_curated_offer` as normal. After the run completes successfully, emit this note at the end of output: `Geometry catalog note: {package_id} was not found in /package-catalog. Consider running \`/package-catalog refresh\` to classify it.` |
-
-**Refresh prompt suppression rule:** Never emit the "Consider running `/package-catalog refresh`" note for slugs whose `package_id` ends with `_\d+mo` (underscore + digits + "mo"). These are CES term-alias slugs — they route through the CES path and the package-catalog is not applicable.
-
-**CES path note:** The CES path (Step A2b onward) does not use `package_id` values from billing. If a non-null `package_id` surfaces on a surface routed to CES, look it up in catalog.md before concluding it is a misrouted NES offer. If catalog.md shows a geometry entry for that slug, flag it as `Possible NES offer on CES surface — verify routing` and surface it to the analyst before continuing the CES chain.
-
-**`free_trial` flag:** If catalog.md shows `free_trial = true` for any slug, add `Free Trial` to the Flags table for that package_id. This supplements but does not replace the BPO / Cart Renewal Behavior fields check in the catalog response.
+When confirmed: add a `Free Trial` row to the Flags table for that package_id. Both the slug-level and response-level signals are checked independently.
 
 ---
 
@@ -915,8 +1006,8 @@ Then, for each distinct `offerId`, call:
 get_offer_collection_definition(datasource="catalog-offers", offerCollectionId=<offerId>)
 ```
 
-**Component summary (sourced from `get_offer_collection_definition`.`offers[]`):**
-From the `get_offer_collection_definition` response, use the `offers[]` array to determine ALL components in the collection (this includes components zero-priced via PRICE_OVERRIDE=0 policy and components with `configKeyValues` overrides, which do not appear in `prePurchaseKeyMap`). Map each UUID against the Known Reusable Component Offer UUIDs in the `/ces-nes` skill. Format: `{N} components: {name1}, {name2}, ...`. Unlisted UUIDs → `unknown-{short_uuid}`. Standalone geometry (no `offers[]` entries): `Standalone — no components`.
+**Component summary (sourced from `get_offer_collection_definition`.`offers[]` — NOT from `prePurchaseKeyMap`):**
+From the `get_offer_collection_definition` response, use the `offers[]` array to determine ALL components in the collection (this includes components zero-priced via PRICE_OVERRIDE=0 policy and components with `configKeyValues` overrides, which do not appear in `prePurchaseKeyMap`). Map each UUID against the Known Reusable Component Offer UUIDs table. Format: `{N} components: {name1}, {name2}, ...`. Unlisted UUIDs → `unknown-{short_uuid}`. Standalone geometry (no `offers[]` entries): `Standalone — no components`.
 
 **Term support check:** From `get_offer_collection_definition`, compare the analyst's target `product_term_num` against the `numberOfTerms` range in the collection schema:
 - Range includes target → `Supports {N}-year via term parameter`
@@ -2367,109 +2458,3 @@ When in doubt, show more not less. It is always better to present a row and let 
 
 > **No ticket has been created or modified.** This is read-only output for your review. To create or update a ticket, tell me explicitly and I'll do it then.
 
----
-
-## Run Logger
-
-**On-demand only.** Do NOT write a log entry automatically after any offer-pulse output. Only write a log entry when the analyst explicitly requests it — e.g., "log this run", "add to use case log", "please log this". Never auto-log, never offer to log unprompted.
-
-When the analyst requests logging:
-1. Read `.claude/skills/offer-pulse/use-case-log.md`. If the file does not exist, create it with the header below, then append the entry.
-2. Append the new entry block to the end of the file using the Write tool (read current content → append → write full updated file).
-
-**Log entry format** — fill every field; write `N/A` for fields that do not apply to the path taken:
-
-```
-## Run {YYYY-MM-DDTHH:MM} — {entry_type}: {entry_value}
-
-Date            : {ISO datetime, e.g. 2026-05-13T14:30}
-Entry type      : Jira / ITC-first / PFID-first / Product name / Surface category
-Entry value     : {the actual input, e.g. AGIGROWTH-161 / slp_wordpress / 1320706 / "MWP Basic"}
-Path            : A — Curated Offer
-Offer operation : Create/Clone / Modify — Add Component / N/A
-NES/CES branch  : NES / CES / Mixed — NES {pct}% / N/A
-Gate asked      : {comma-separated dimensions that required a question, e.g. "Term, Market" — or "none"}
-CES chain steps : Step 1: {success/fail} | Step 2: {success/fail} | Step 3: {success/fail} — or N/A
-Champion        : Found — {value} (source: billing / merch match / ID scan / tag search) / Not found — NET-NEW BUILD / N/A
-Flags fired     : {comma-separated flag names from the Flags table, e.g. "A/B test likely, M365 geo risk" — or "none"}
-Ticket preview  : Requested / Not requested / Not applicable (BLOCKING)
-Notes           : {anything unexpected — WebFetch ambiguity, zero rows, term mismatch, anomalous results; "none" if clean}
-```
-
-**File header** (write once when creating the file):
-
-```markdown
-# Offer Pulse — Use Case Log
-<!-- append-only; one entry per run; written by offer-pulse after every output -->
-```
-
----
-
-## Validation Block
-
-**Always shown at the end of every offer-pulse output — no exceptions, no gating.**
-
-The Validation Block is how the golden set is built over time. Since the correct answer isn't known upfront, the analyst confirms or corrects the output after seeing it. Confirmed outputs are promoted to the golden set for future test runs.
-
-Show the Validation Block immediately after the final output (after the "No ticket has been created" line). Do not wait for the analyst to ask. Do not skip it for any reason.
-
----
-
-### NES Validation Block
-
-Show this when path_type is NES Standalone or NES Bundle:
-
-```
----
-## Validation
-
-To improve future results, please confirm or correct these fields:
-
-1. **Path type** — Is this correctly classified as [NES Standalone / NES Bundle]?
-2. **Source offer** — Is `{package_id}` the correct curated offer slug for this ticket?
-3. **Plan name** — Is `{plan_name from get_offer_collection_definition}` the correct plan?
-4. **Discount code** — Is `{discount_code}` correct, or should it be different/none?
-5. **Pricing** — Do the sale/list prices look right for this market and term?
-
-Reply `save {case_id}` to promote this output to the golden set (e.g. `save AGIGROWTH-161`).
-Reply `skip` to continue without saving.
-
-*Saving helps /batch-test verify future runs against analyst-confirmed correct answers.*
-```
-
----
-
-### CES Validation Block
-
-Show this when path_type is CES:
-
-```
----
-## Validation
-
-To improve future results, please confirm or correct these fields:
-
-1. **Path type** — Is this correctly classified as CES?
-2. **PFID coverage** — Are all the PFIDs in the output correct for this surface/ticket? Any missing or extra?
-3. **Discount codes** — Are the discount codes shown correct for each PFID?
-4. **Package structure** — Does the champion package (if found) match what's actually live on the surface?
-5. **Term/tier** — Do the term and tier values look right for each row?
-
-Reply `save {case_id}` to promote this output to the golden set (e.g. `save CMS-33982`).
-Reply `skip` to continue without saving.
-
-*Saving helps /batch-test verify future runs against analyst-confirmed correct answers.*
-```
-
----
-
-### `save <case_id>` handler
-
-When the analyst replies `save <case_id>` after a Validation Block:
-
-1. Invoke `/golden-set promote <case_id>` — pass the confirmed output fields (with any corrections the analyst stated) as context.
-2. The golden-set skill handles formatting, preview, and write. Do not write to golden-set.md directly from offer-pulse.
-
-When the analyst replies `skip`:
-
-Do nothing. Continue normally.

@@ -511,7 +511,12 @@ different surface: "WARNING: this offer serves {served_surface}, not {requested_
 — confirm wiring with ecomm before using." For CES candidates, cross-check the ITC column
 in offer_pulse_experiment billing data.
 
-Resolution : —
+Resolution : Partial — Option 2 surface label enrichment (2026-05-16) adds surface_nes_ces
+             annotation from surface-vocab to the ROUTE line and Quick Reference Surface
+             field. Analyst sees the surface's NES/CES classification before reviewing
+             catalog candidates, which reduces the risk of silently accepting a wrong-
+             surface match. Full fix (per-candidate wiredSurfaces/ITC verification against
+             catalog) is still pending.
 Resolved   : —
 
 ---
@@ -665,7 +670,7 @@ Resolved   : —
 
 ## GAP-022
 Title      : Path B (Pricing/Discount) workflow unvalidated — never exercised in logged runs
-Status     : open
+Status     : resolved
 Category   : Process Gap
 Skill      : offer-pulse
 Added      : 2026-05-14
@@ -683,8 +688,10 @@ Blast Radius Mode run — against known real pricing tickets. Log results to use
 run buddy scoring against expected outputs. Fix any gaps found before the next pricing
 experiment kicks off.
 
-Resolution : —
-Resolved   : —
+Resolution : Path B (Pricing/Discount) was removed from offer-pulse entirely on 2026-05-17.
+             PFID Inventory Mode and Blast Radius Mode instructions were deleted. All pricing
+             and discount scope is now owned by /pricing-ticket. Gap is moot.
+Resolved   : 2026-05-17
 
 ---
 
@@ -923,6 +930,564 @@ confirmed US-only, select wsb-vnext-tier{N} as the primary champion and label vn
 and vnext-i18no365 as "market excluded: international scope"; (3) the three-series table in
 the Series Disambiguation block already covers this — ensure Chain Step 1 consults it before
 declaring "chain resolved."
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-030
+Title      : CES Tier column — product_pnl_subline_name null for M365/PMail PFIDs; fallback
+             produces accounting category label instead of tier descriptor
+Status     : open
+Category   : Data Coverage Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : batch-test 2026-05-15; CMS-31421 (Email Essentials M365, dpp_precheck);
+             6/6 C4 (Tier) failures; output produced "PMail" for all rows; expected "standalone"
+
+The CES Terminal Payload Tier column is sourced from product_pnl_subline_name with fallback
+to product_pnl_line_name. For Email Essentials M365 PFIDs (867688, 867694, 867696),
+product_pnl_subline_name is null, so the skill falls back to product_pnl_line_name = "PMail"
+— an accounting PNL category, not a tier descriptor. The golden-set expected value is
+"standalone", reflecting the offer's geometry (Standalone: offers[] empty, prePurchaseKeyMap
+absent).
+
+Two open questions before any fix is applied:
+1. Is the null subline_name pattern isolated to M365/PMail PFIDs, or does it affect a
+   broader class of non-hosting standalone CES products?
+2. When product_pnl_subline_name is not null, what values does it actually contain — are
+   they meaningful tier labels (Economy, Deluxe, Business) or also accounting categories?
+
+Until these are answered via a billing query, it is unknown whether a geometry-derived
+fallback ("standalone" for Standalone geometry, "tier{N}" for bundle slugs) is the right
+fix or whether a different source column should be used.
+
+Fix direction (pending validation): insert a geometry-derived label as a second fallback
+step between product_pnl_subline_name (null check) and product_pnl_line_name: standalone
+geometry → "standalone"; bundle slug containing -tier{N} → "tier{N}"; other bundle →
+"bundle". Apply product_pnl_line_name only as last resort with a [TIER-FALLBACK] warning
+flag. Do not implement until billing query confirms the null pattern is systemic and
+geometry-derived labels are the correct replacement.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-031
+Title      : CES-only surface registry missing — pre-launch NES check routes CES-only surfaces
+             to NES when catalog entries exist but are not wired
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : batch-test 2026-05-15; CMS-31766 (slp_ssl / ssl-config surface); expected CES
+             NET-NEW BUILD; actual output was NES Standalone (sslcert-managed-with-monitoring,
+             offerId 28e5b730); G1 misclassification
+
+The pre-launch NES check (GAP-008 fix) scans the NES catalog for active curated offers
+matching the product when billing rows = 0. On slp_ssl / ssl-config, it found
+sslcert-managed-with-monitoring and routed the output as NES Standalone. But slp_ssl is a
+CES-only surface — the NES SSL offer exists in catalog but is NOT wired to this surface.
+The pre-launch NES check has no registry of surfaces that are structurally CES-only, so it
+cannot distinguish "catalog entry exists but not wired here" from a genuine pre-launch NES
+case.
+
+Open question: Which other surfaces are CES-only and would trigger this false-positive NES
+routing? The registry needs to be built before the fix is applied. At minimum:
+- slp_ssl / ssl-config: NES SSL catalog entries exist but surface runs CES only
+
+Fix direction: add a CES-only surface registry to the pre-launch NES check. When the surface
+is on the registry and a catalog match is found, emit a NES disclosure but proceed to the
+CES chain. Do not implement until the registry has been validated — an incomplete registry
+will still silently misroute unlisted surfaces.
+
+Resolution : Partial — Option 2 surface label enrichment (2026-05-16) attaches the surface
+             NES/CES classification from surface-vocab to the ROUTE line. For surfaces
+             profiled as CES in the vocab (e.g. slp_ssl), the analyst sees "is a known
+             CES-dominant surface" before any NES pre-launch routing fires, providing a
+             transparency layer. Option 1 vocab advisory does NOT fire for CES-classified
+             surfaces (it only fires when surface_nes_ces = NES or Mixed). The registry-
+             based routing fix — blocking the pre-launch NES check for confirmed CES-only
+             surfaces — is still pending.
+Resolved   : —
+
+---
+
+## GAP-032
+Title      : Bare ITC input stops at gate — no Surface Audit inference mode for ITC-first
+             entries without product/path/operation signals
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : batch-test 2026-05-15; 3/5 cases (M365-OE-NOTEAMS-DPP-19, WAM-PREM-COMM-FOS-4ARM,
+             CMS-31766) had input_type=itc with no product/PFID/path/term in the entry;
+             all three stopped at the gate and produced zero output; 0/3 scoreable
+
+When the only input is an ITC string with no product name, PFID, price target, or offer
+operation signal, the six-dimension gate fires on Dimensions 0, 1, and 5 simultaneously.
+The agent waits for analyst input and produces no output. For Surface Audit use cases —
+"show me everything on this surface" — the gate is unnecessary friction.
+
+Open question before implementing: Should the inference mode auto-proceed or prompt once?
+Risk of fully auto-proceeding: a bare ITC might be an accidental incomplete entry rather
+than a deliberate Surface Audit request.
+
+Fix direction (pending decision): add a pre-gate ITC-first inference rule. If the entry
+matches only an ITC pattern (slp_*, dpp_*, dlp_*, etc.) with no other signals, infer
+Surface Audit mode, skip the gate, run full Path A discovery, and append a follow-up prompt
+for ticket-creation inputs. Confirm approach before implementing — this touches the highest-
+traffic entry path in the skill.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-033
+Title      : Rolled-back experiment variant naming — no heuristic distinguishes rollback
+             artifacts from pre-launch NES offers in catalog
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-92 overnight analysis 2026-05-15; -wamba variants
+             (wordpress-o365-forever-ssl-basic-wamba, wordpress-openexchange-forever-ssl-basic-wamba)
+             found active=true in catalog (rev 1, March 2026) with zero billing in 7-day
+             window; pre-launch NES check surfaces them as live candidates alongside
+             genuinely pre-launch offers
+
+The skill cannot distinguish three superficially identical states: (1) Pre-launch NES —
+active in catalog, genuinely never wired/shipped; (2) Rolled-back experiment — was
+shipping, experiment ended, billing fell to zero, active flag not updated after rollback;
+(3) Decommissioned offer — active=true by oversight, not intentional.
+
+The -wamba variants in AGIGROWTH-92 are experiment rollback artifacts. The pre-launch
+NES check (GAP-008 fix) surfaces them as valid candidates alongside genuinely unreleased
+offers, and the output gives no signal to distinguish them. An analyst who picks a
+rolled-back variant as the clone source files a ticket for an inactive baseline.
+
+Fix direction: after the pre-launch NES check returns active=true candidates with zero
+billing, add a naming-convention heuristic scan. Slug patterns containing `-wamba`,
+`-test`, `-rollback`, `-v2`, `-experiment`, `-hold` are common experiment-variant naming
+conventions. Annotate these candidates: "Naming convention suggests experiment variant —
+confirm live status before using as clone source." Do not suppress from candidate list;
+annotate only. Also: rev=1 + zero billing = possibly rolled back or never wired; rev>1
++ zero billing = likely pre-launch revision.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-034
+Title      : ROW vs ROW+IN filter ambiguity — India excluded from default ROW but included
+             in ROW+IN; no override instruction in skill
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-92 overnight analysis 2026-05-15; ticket explicitly stated
+             "ROW & IN" (India included); skill default ROW filter not documented;
+             standard GoDaddy ROW excludes India (NOT IN ('US','CA','AU','GB','IN'));
+             ROW+IN override requires NOT IN ('US','CA','AU','GB') — India removed from
+             exclusion; skill has no instruction covering this distinction
+
+The Dimension 3 market gate distinguishes US, DEM, ROW, and All Markets, but does not
+document: (1) the exact WHERE clause for "ROW" — default excludes US + DEM + India;
+(2) what "ROW+IN" means — India included, DEM still excluded; (3) that "ROW & IN",
+"ROW including India", or "India + ROW" in a Jira ticket is a non-default override
+requiring a different filter. Without this, an agent running a ROW+IN ticket silently
+uses the default ROW filter, understating geographic scope. India is a high-volume
+market — a missed India scope means the EP ticket covers only part of the intended
+geography.
+
+Fix direction: add a ROW filter definition table to Dimension 3:
+
+  US only   : country_code = 'US'
+  DEM       : country_code IN ('CA','AU','GB')
+  ROW       : country_code NOT IN ('US','CA','AU','GB','IN')
+  ROW+IN    : country_code NOT IN ('US','CA','AU','GB')
+  All mkts  : (no country filter)
+
+Add pre-parse rule: if ticket text contains "ROW & IN", "ROW and IN", "ROW including
+India", "India + ROW", or "ROW+IN", resolve D3 = ROW+IN and use the corresponding filter.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-035
+Title      : catalog_query_get_offers file size — M365 plan list (129K tokens) exceeds
+             Read tool limit; agents error or stall with no fallback instruction
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-161 overnight analysis 2026-05-15; agent read attempt on
+             mcp-catalog-mcp-dev-catalog_query_get_offers result containing 129,226 tokens
+             (124 M365 plans); Read tool limit = 25K tokens; agent errored on all attempts;
+             required spawning replacement agent with Bash grep workaround; original
+             agent stalled mid-run
+
+When catalog_query_get_offers is called with tags=["m365"] or other broad parameters,
+the result file can contain 124+ plans at ~1K tokens each, totaling 129K+ tokens. The
+Read tool 25K limit causes an error on every read attempt. The skill has no instruction
+for this case. Agents either retry the same failing read (stalling the run) or abandon
+the plan scan entirely (missing valid champions). Both failure modes confirmed in
+AGIGROWTH-161. This is high-frequency risk: all dpp_precheck M365 tickets and all
+Microsoft 365 email tickets route here via Chain Step 3 known-tag mapping.
+
+Fix direction: add an explicit file-size handling instruction to Chain Step 3 immediately
+after the catalog_query_get_offers call. For products known to produce large result sets
+(m365 → 124+ plans, sslcert → ~40+ plans), do NOT attempt to Read the full result file.
+Use Bash grep for specific plan name keywords from the request:
+
+  grep -o '"planName":"[^"]*"' {result_file} | grep -i "{keyword}"
+
+For these tags, always use the Bash grep path. Read only when the estimated plan count
+is small (< 20 plans, e.g. titanemail, wam, professional-email).
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-036
+Title      : Post-creation audit mode absent — skill always produces a "create this offer"
+             payload even when the EP ticket has already been deployed
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-161 overnight analysis 2026-05-15; EP-87620 deployed 2026-04-29;
+             challenger microsoftemail-onlineessentialsnoteams-discount-365af1f1cb
+             confirmed active in catalog with 261 orders/7d via discount code; skill
+             produced a "create this offer" payload as if the offer did not yet exist;
+             no output mode for confirming deployed offer parameters
+
+When a Jira ticket references an EP ticket already deployed, the task is
+confirmation/audit — verify parameters match the spec, confirm billing traffic, flag
+discrepancies — not a new "create this offer" payload. The skill has one output mode:
+pre-creation Quick Reference. In AGIGROWTH-161, the agent correctly identified the live
+challenger via the discount code in billing but framed all output as if the offer was
+still to be built, making the output misleading and the distinction between "what to
+build" vs "what was already built" invisible.
+
+Fix direction: add an EP-deployed signal detector to Entry Option 1 Step 3. If the
+ticket body, comments, or linked tickets contain "EP-XXXXX deployed", "EP-XXXXX merged",
+"went live on [date]", or "launched [date]", set audit_mode = true. In audit mode:
+(1) look up the deployed offer via catalog MCP; (2) confirm active=true and retrieve
+plan/pricing; (3) confirm billing traffic via discount_code or package_id query on
+offer_pulse_experiment for last 7 days; (4) output a DEPLOYMENT AUDIT block instead of
+Quick Reference. The DEPLOYMENT AUDIT block confirms: slug, offer ID, active status,
+billing volume, and whether parameters match the ticket spec. Flag any discrepancy as
+ACTION REQUIRED.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-037
+Title      : Discount code expiry not proactively calculated — imminent expirations
+             undetected until offer surface goes dark
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-161 overnight analysis 2026-05-15; discount code 365AF1F1CB found
+             in billing; get_curated_offer returns endDate "2026-06-01" for associated
+             offer; 17 days from run date (2026-05-15); skill produced output with no
+             mention of imminent expiry
+
+When the champion curated offer is identified, the skill does not check the `endDate`
+field. A discount code or time-limited offer expiring in under 30 days represents a
+production risk: if the new experiment does not deploy before the incumbent expires, the
+surface will have no active offer for the promotion period. For AGIGROWTH-161, the
+challenger microsoftemail-onlineessentialsnoteams-discount-365af1f1cb expires 2026-06-01
+— 17 days from the run date — an urgent deployment dependency invisible in the output.
+
+Fix direction: after calling get_curated_offer on the identified champion, check the
+`endDate` field. If `endDate` is within 30 days of the current date, emit a warning
+prominently in the Quick Reference output (not only in the validation block):
+
+  ⚠ EXPIRY ALERT: [slug] expires [date] — [N] days from today.
+  New experiment must deploy before this date to avoid surface gap.
+
+If `endDate` is within 7 days, escalate to hard blocker status. Applies to both the
+incumbent champion (being replaced) and the new challenger if it has an end date.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-038
+Title      : vnext-i18nox-*-precheck slug naming inconsistency — precheck-suffixed variants
+             don't exist for i18n series; keyword seed "precheck" silently misses base slugs
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-186 overnight analysis 2026-05-15; expected packages
+             vnext-i18nox-tier1-precheck, vnext-i18nox-tier3-precheck,
+             vnext-i18nox-tier4-precheck NOT FOUND in catalog; base slugs
+             vnext-i18nox-tier1/3/4 DO exist; wsb-vnext series uses -precheck suffix
+             at dpp_precheck (confirmed); i18n series uses base slugs on ALL surfaces
+
+The dpp_precheck surface uses two distinct slug naming conventions:
+- wsb-vnext series: surface-specific suffix appended (wsb-vnext-tier3-precheck)
+- vnext-i18nox / vnext-i18no365 series: NO suffix — base slug used on all surfaces
+
+The Chain Step 2 keyword seed table for dpp_precheck includes "precheck" as a required
+seed. This correctly surfaces wsb-vnext variants but produces zero matches for i18nox
+base slugs (no "precheck" substring). An analyst searching for i18n variants at
+dpp_precheck gets a partial candidate table that silently omits the entire i18n family.
+Confirmed by exhausting the catalog search in AGIGROWTH-186: 3 of 7 expected packages
+NOT FOUND via precheck-suffixed slug names; base slug search confirmed they exist.
+This naming inconsistency is undocumented in SKILL.md.
+
+Fix direction: add a naming convention footnote to the dpp_precheck surface keyword seed
+entry: "wsb-vnext series uses -precheck suffix; vnext-i18nox and vnext-i18no365 series
+use BASE slugs on dpp_precheck — do not filter by 'precheck' when searching for i18n
+family slugs." Add a secondary seed pass for i18n series at dpp_precheck: after the
+"precheck"-seeded ID scan, run a second scan with seeds ["i18nox", "i18no365"] WITHOUT
+the "precheck" filter. Union the results.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-039
+Title      : Strategic Partnerships products (TrustedSite, Norton, SiteLock) have no
+             catalog tags — CES Chain Step 3 blind spot; chain exhaustion produces no
+             actionable guidance
+Status     : open
+Category   : Data Coverage Gap
+Skill      : offer-pulse
+Added      : 2026-05-15
+Evidence   : AGIGROWTH-186 overnight analysis 2026-05-15; TrustedSite has NO existing
+             curated offer in catalog (confirmed via Chain Steps 1 and 2 exhaustion);
+             CES Chain Step 3 known-tag mapping table does not include TrustedSite,
+             Norton, SiteLock, or any Strategic Partnerships product; Step 3 cannot
+             run for these products; result = silent chain exhaustion with no guidance
+
+CES Chain Step 3 relies on a product-name → catalog-tag mapping table. Strategic
+Partnerships products — TrustedSite, Norton Security, SiteLock — have no stable catalog
+tags: they are third-party add-ons without a dedicated NES product ontology. When a
+ticket targets one of these products and the CES chain reaches Step 3, no tag can be
+derived and Step 3 cannot run.
+
+For AGIGROWTH-186, the correct answer was "TrustedSite has no existing curated offer —
+two-step operation required: (1) create a standalone TrustedSite offer, (2) add it as
+an add-on component to 7 existing WAM precheck bundles." But the skill cannot distinguish
+"no tag available" from "no offer exists" — both produce no catalog output and no
+actionable output for the analyst.
+
+These products are always CES add-ons; running the pre-launch NES check for them is
+wasted work and risks false-positive NES routing.
+
+Fix direction: add Strategic Partnerships products to the pre-launch NES check early-exit
+list (alongside the CES-only surface registry from GAP-031). When the input product is
+TrustedSite, Norton, SiteLock, or another recognized Strategic Partnerships brand:
+(1) Skip the NES catalog scan — always CES add-ons
+(2) Run CES chain Steps 1 and 2 with name-based keyword seeds only
+(3) If chain exhausts, emit explicitly:
+    "NET-NEW BUILD required — [product] is a Strategic Partnerships add-on with no
+    existing curated offer. Two-step operation: create standalone [product] offer, then
+    add to target bundle(s). Confirm with @sparmar before filing EP ticket."
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-040
+Title      : Ghost IDs and CES term aliases counted in NES% — inflated NES% triggers false
+             NES routing on mixed or CES-dominant surfaces
+Status     : resolved
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-16
+Evidence   : ces-nes architecture review; TK-002, TK-003, TK-004. Ghost IDs (nes-*, offer-*
+             prefix slugs) and CES term aliases (_NNNmo/_NNNyr suffix slugs) both appear as
+             non-null package_id values in billing/CLN data. The Step A2 NES% calculation
+             counted these as NES evidence, inflating the percentage and potentially routing
+             CES-dominant surfaces into the NES path.
+
+When ghost IDs or CES term aliases appear as non-null package_id values in billing data,
+the Step A2 NES% calculation incorrectly counts them as NES volume. This inflates NES%
+and can force a surface into the NES path (A2a catalog calls) when the true NES-eligible
+volume is zero or lower than the threshold.
+
+Three slug types to exclude from NES% calculation:
+1. CES term aliases — slugs ending in _NNNmo or _NNNyr (e.g. wsb_vnext_tier2_060mo).
+   These are CES merchandising API aliases encoding term overrides. NOT NES slugs.
+2. Ghost IDs by prefix — slugs starting with offer-. Consistently unresolvable.
+   NOTE: nes- prefix behavior updated 2026-05-20 — see below.
+3. Known ghost list — nes-wss-tier0/1/2-nortonsmb-standardfreetrial family.
+   Same behavior as prefix-matched ghosts.
+
+Resolution : Option 4 pre-classification filter added to Step A2a (2026-05-16). Before any
+             get_curated_offer call, all package_id values are classified as CES term aliases,
+             ghost IDs (prefix + known list), or valid NES slugs. NES% is recomputed using
+             only valid NES slugs. Excluded slugs appear in the Flags table.
+             Cross-reference TK-002/003/004.
+
+             Updated 2026-05-20 (GAP-042 investigation): nes- prefix reclassified. The page
+             emits nes-{slug} as a pkgid field; the catalog stores the clean {slug}. SKILL.md
+             updated to strip the nes- prefix and retry catalog lookup before classifying as
+             ghost. nes-cpanel-set-1-economy-ssl-365-wss-xtra removed from known ghost list
+             — it is a valid live offer when prefix is stripped. nes-wss-tier0/1/2-nortonsmb-*
+             remain in the known ghost list (unconfirmed in catalog).
+Resolved   : 2026-05-16
+
+---
+
+## GAP-041
+Title      : pricing-ticket outputs no UPP-specific warnings — wrong implementation path
+             and silent path exclusions
+Status     : resolved
+Category   : Process Gap
+Skill      : pricing-ticket
+Added      : 2026-05-17
+Evidence   : 2026-03-12 Hivemind UPP experiment walkthrough transcript (TK-040, TK-042)
+
+When an analyst enters a `upp_*` ITC, the skill runs Blast Radius Mode and produces a "CES
+Offer Candidates" table pointing to the merchandising API as the discount configuration path.
+This is incorrect for UPP surfaces. Three critical facts are missing from the output:
+(1) UPP discount experiments are configured via Hivemind cohort JSON (DISC-##### codes
+from the pricing team), NOT by updating the CES package in the merchandising API. The CES
+Offer Candidates section implies the analyst should configure the discount in the merch API
+— which is the wrong implementation path entirely.
+(2) BMAT (Bill Me After Trial) customers CANNOT receive UPP discount codes due to an ecom
+billing agent limitation. Experiments silently do nothing for this segment with no error.
+(3) Direct-to-paid (new purchase flow) customers are also excluded from UPP discount logic.
+Fix direction: Add UPP surface detection in the Flags section of Blast Radius Mode output:
+when any ITC in B1 results matches LIKE 'upp_%', emit a UPP WARNING block:
+- Implementation path: Hivemind cohort JSON (not merchandising API config)
+- Path exclusions: BMAT customers and direct-to-paid customers receive no discount
+- Suppress or relabel the "CES Offer Candidates" merchandising lookup to avoid implying
+  it is the actionable configuration step for UPP discounts (slug lookup still useful for
+  PFID identification, but should NOT be presented as the discount configuration target)
+Related    : TK-040, TK-042
+
+Resolution : UPP surface detection added to pricing-ticket: UPP exception in B2 CES
+             lookup, UPP warning flag in Blast Radius Flags table, UPP Hivemind
+             Configuration output section with cohort JSON template, path exclusions,
+             and test→prod workflow. CES Offer Candidates table excludes UPP ITCs.
+Resolved   : 2026-05-17
+
+---
+
+## GAP-042
+Title      : NES event schema mismatch — pf_id_package_details_v1 cannot join new NES events
+             because productId changed from integer PFID to customer UUID path format
+Status     : open
+Category   : Data Coverage Gap
+Skill      : offer-pulse
+Added      : 2026-05-20
+Updated    : 2026-05-20 (root cause + ITC attribution mechanics + doc sources)
+Evidence   : AGIGROWTH-228 investigation 2026-05-20. cpanel-set-1-economy-ssl-365-wss-xtra
+             confirmed live via CMT page inspection (Tony Hill, $5.99/mo × 36 = $215.64,
+             PFID 1338734). Direct queries of gd_traffic_mart.traffic_page_event,
+             pricing_experiment_dev.pf_id_package_details_v1, and
+             pricing_experiment_dev.offer_pulse_experiment confirm the root cause.
+
+Root cause (confirmed):
+New NES add-to-cart events emitted from /configure/traffic pages (dlp_hosting ITC) use a
+different productId format than old CES events:
+
+  Old CES format (/configure, slp_hosting_4GH):
+    productId = integer PFID (e.g. "1338734")
+    package_json = [{"id": "cpanel-set-1-economy-365", ...}]   ← no nes- prefix
+    → captured by pf_id_package_details_v1, flows into offer_pulse_experiment
+
+  New NES format (/configure/traffic, dlp_hosting):
+    productId = customer UUID path (e.g. "/customers/31430a42-6f4f-4646-...")
+    package_json = [{"id": "nes-cpanel-set-1-economy-ssl-365-wss-xtra", ...}]
+    → NOT captured — pf_id_package_details_v1 joins on integer PFID and finds no match
+
+Volume (90 days, gd_traffic_mart.traffic_page_event):
+  nes-cpanel-set-1-economy-ssl-365-wss-xtra: 6,018 add-to-cart events
+    - US (/configure/traffic): 1,534 events
+    - UK (/en-uk/): 777, CA (/en-ca/): 208, AU (/en-au/): 146, and more
+    - ALL under dlp_hosting ITC
+  cpanel-set-1-economy-365 (old slug): 12 US events, all on legacy /configure path
+  cpanel-set-1-economy-ox (old slug): India only, /en-in/configure
+
+Result in pf_id_package_details_v1 (all-time):
+  slp_hosting_4GH + cpanel-set-1-economy-ox: 2 events (India, old format)
+  slp_hosting_4GH + cpanel-set-1-economy-365: 1 event (old format)
+  dlp_hosting: 0 rows — all 6,018 NES events invisible due to UUID productId
+
+Result in offer_pulse_experiment:
+  slp_hosting_4gh: old slugs only (ox=361, 365=274 transactions joined from billing)
+  dlp_hosting: 11 billing transactions with NULL package_id (no lookup match)
+  nes-cpanel-set-1-economy-ssl-365-wss-xtra: never appears
+
+Secondary blocker (GAP-040):
+  Even if the pipeline were fixed, SKILL.md ghost ID filter discards all nes- prefixed
+  slugs before catalog lookup. Both the pipeline fix and the ghost ID fix are required.
+
+Resolves Daniel Hill's two suspicions (Teams thread 2026-05-20):
+  Suspicion 1 (bad package_id data): Confirmed. The pipeline correctly parses integer
+    PFID events but was never updated to handle UUID-path productId events from the new
+    NES page format. The data exists in traffic_page_event (6K events) — it just doesn't
+    flow downstream.
+  Suspicion 2 (wrong ITC): Confirmed. dlp_hosting IS the correct NES surface (1,534 US
+    events with the live slug). slp_hosting_4GH is a legacy CES path still emitting old
+    slugs. offer-pulse was looking at the wrong ITC for the NES offer.
+
+ITC attribution mechanics — why slp_hosting_4gh is correct but empty for NES:
+  The SLP at /hosting/web-hosting uses slp_hosting_4gh as its ITC on links and CTAs.
+  But the add-to-cart event is fired from the NES configure page (/configure/traffic),
+  not the SLP. The configure page emits its own ITC: dlp_hosting. Per the ITC funnel
+  design spec, ITC on an add-to-cart event belongs to the page that fires the event
+  (the configure page), not the referrer (the SLP). slp_hosting_4gh is the entry
+  surface; dlp_hosting is the add-to-cart surface. These are sequential funnel steps.
+
+  Old CES path: the add-to-cart fired on or adjacent to the SLP (/configure) →
+    slp_hosting_4GH appears in pf_id_package_details_v1.
+  New NES path: the add-to-cart fires at /configure/traffic with ITC dlp_hosting →
+    slp_hosting_4gh gets no events; dlp_hosting gets all 6,018 NES events.
+
+  This is the same phenomenon the "Offer Pulse - In Progress" Confluence page (BI space,
+  updated 2026-05-20) documents as: "Cart tracking ≠ purchase tracking." That page lists
+  it as a known current challenge with the pipeline, separate from the UUID productId
+  issue.
+
+Documentation (2026-05-20):
+  (1) ITC Funnel Instrumentation & Reporting (BI space, updated 2026-05-19):
+      "ITC identifies the surface where the customer can add a product to cart.
+       add_to_cart event Owner/Data Producer: team who owns the CTA surface."
+      https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3134915218
+  (2) Pricing Experiment — Offer Pulse — In Progress (BI space, updated 2026-05-20):
+      "Current Challenges: Tracking Code Mismatches — Cart tracking ≠ purchase tracking."
+      https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/4394484952
+
+Ecomm team context (2026-05-20 meeting):
+- Tony Hill: package slug is in package_json column; suggested table owner could surface
+  it as a standalone field
+- Saritha Bhandarkar: confirmed ecomm does not persist product package ID as a discrete
+  field in their system
+- Harsh Kapoor: their bundle classification works at subscription/transaction level
+  (completed orders), not add-to-cart events
+
+Fix direction:
+(1) Short term — add cpanel-set-1-economy-ssl-365-wss-xtra to a known-override registry
+    for dlp_hosting + 3-year + WH Economy, bypassing offer_pulse_experiment entirely.
+(2) Pipeline fix — update pf_id_package_details_v1 to extract PFID from the UUID path
+    format in product_json, or join on a different field that remains stable across event
+    formats. This unblocks all NES products on the new page format, not just WH Economy.
+(3) Ghost ID fix (required alongside pipeline fix) — update SKILL.md to strip the nes-
+    prefix before catalog lookup (see GAP-040). Without this, a fixed pipeline would still
+    produce discarded slugs.
 
 Resolution : —
 Resolved   : —

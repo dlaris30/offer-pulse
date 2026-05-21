@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "mcp__catalog-mcp-dev__*",
+      "mcp__distillery__*",
+      "mcp__atlassian__*",
+      "Agent(*)"
+    ]
+  }
+}

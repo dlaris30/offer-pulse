@@ -233,15 +233,17 @@ The `entities-transformation-job` batch (2023-06-29) produced apiVersion 3 recor
 
 ## Ghost-ID Prefix Patterns
 
-Certain package_id prefixes consistently return NOT FOUND across all three catalog systems (`catalog-curated-offers`, `catalog-offers`, `merch-packages`):
+Certain `package_id` values return NOT FOUND in all catalog systems. Patterns:
 
 | Prefix | Example | Behavior |
 |---|---|---|
-| `nes-` | `nes-social-first-starter`, `nes-cpanel-set-2-ultimate-365-xtra` | Always NOT FOUND. Likely deprecated mid-migration or pre-launch slugs. Despite `nes-` prefix implying NES intent, no catalog backing found. |
-| `offer-` | `offer-airo-builder-professional`, `offer-titanemail-ultra`, `offer-dpp-solution-set-q3-b-ecommerce` | Always NOT FOUND. May be experiment IDs or offers removed post-launch. |
+| `nes-` | `nes-cpanel-set-1-economy-ssl-365-wss-xtra` | **Transport-layer prefix, not a ghost marker.** The page/CMT emits `nes-{slug}` as the pkgid field; the catalog stores the offer under the clean `{slug}`. Strip the prefix and retry `get_curated_offer` with the clean slug. If the clean slug is also NOT FOUND, then it is a ghost. Do not assume NOT FOUND without trying. |
+| `offer-` | `offer-airo-builder-professional`, `offer-titanemail-ultra`, `offer-dpp-solution-set-q3-b-ecommerce` | Consistently NOT FOUND across all catalog systems. May be experiment IDs or offers removed post-launch. Attempt `get_curated_offer` once to confirm; classify as ghost if NOT FOUND. |
 | `_060mo`, `_012mo` suffixes | `wsb_vnext_tier2_060mo`, `domainauction_tier1_012mo` | CES merch-packages aliases. The suffix encodes a term override. `wsb_vnext_tier2_060mo` → redirects to `wsb-vnext-tier2` with Term `60:MONTH`. These are CES, not NES, despite appearing in CLN package_id. |
 
-When you encounter a NOT FOUND, check: (1) is it a `nes-`/`offer-` ghost, (2) is it a `_NNNmo` term alias in merch-packages, (3) is it a retired offer still referenced in old event data.
+**Known genuine ghosts regardless of prefix:** `nes-wss-tier0-nortonsmb-*`, `nes-wss-tier1-nortonsmb-*`, `nes-wss-tier2-nortonsmb-*` — confirmed NOT FOUND even after stripping the `nes-` prefix.
+
+When you encounter a NOT FOUND: (1) if `nes-` prefix, strip and retry before classifying as ghost; (2) check `offer-` prefix, (3) check if it is a `_NNNmo` term alias in merch-packages, (4) check if it is a retired offer still referenced in old event data.
 
 ---
 
@@ -320,7 +322,7 @@ When you encounter a NOT FOUND, check: (1) is it a `nes-`/`offer-` ghost, (2) is
 | planTier | Numeric suffix in NES plan names encoding the CES bundle variant (e.g. 4000=cPanel Ultimate OX, 4007=cPanel Ultimate 365). |
 | `diablo` tag | Fingerprint of legacy CES-to-NES migration. Offer name will be `ProductOffer <uuid>` pattern. |
 | ITC | Surface/journey code. Persists to order data. Package ID does NOT. |
-| FOS / SLP | Front of Site = Sales Landing Page = `slp_*` surfaces. |
+| FOS | Front of Site — broad term covering SLP (`slp_*`), cart, precheck (`dpp_precheck`), and checkout. NOT synonymous with SLP. Always confirm the specific sub-surface when FOS is used without a qualifier. Check Jira `customfield_34656` (surface field) when available — it is authoritative over the ticket title. |
 | DPP | Domain Purchase Path = `dpp_*` surfaces (e.g. `dpp_precheck`, `dpp_config1`). |
 | DLP | Domain Landing Page = `dlp_*` surfaces (e.g. `dlp_wordpress_hosting`, `dlp_domain`, `dlp_usoybo`). |
 | UPP | Upsell Purchase Path = `upp_*` surfaces. 97 surfaces, 100% CES, not on migration roadmap. |
@@ -349,6 +351,24 @@ When you encounter a NOT FOUND, check: (1) is it a `nes-`/`offer-` ghost, (2) is
 
 ---
 
+## Pipeline Review Mode
+
+When invoked by an automated skill (e.g., `/overnight` Step 3a) to review a proposed fix, output a structured verdict as the **first line**:
+
+- **APPROVED** — the proposed fix is architecturally sound. Include relevant context, constraints to respect, and known gotchas below the verdict.
+- **BLOCKED** — the proposed fix has a hard structural incompatibility that would cause it to fail or produce incorrect output. List each blocker precisely.
+
+**Default posture is APPROVED.** Only output BLOCKED for hard structural incompatibilities:
+- Fix assumes NES catalog resolution on a confirmed CES surface (package_id null)
+- Fix attempts to resolve V3 `offerIds[]` UUIDs via the V2 endpoint (always NOT FOUND)
+- Fix assumes `prePurchaseKeyMap` is present on a Standalone offer
+- Fix treats `nes-{slug}` as directly resolvable without stripping the prefix (the catalog stores the clean `{slug}`, not the prefixed form)
+- Fix classifies a confirmed-ghost slug (tested NOT FOUND in catalog even after `nes-` prefix strip) as resolvable
+
+Contextual risks, edge cases, and "watch out for" notes are **not blockers** — include them after the verdict under "Constraints to respect."
+
+---
+
 ## Common Questions
 
 **Q: When should a new offer be built in NES vs CES?**
@@ -374,6 +394,31 @@ Use `offersGrouping` to confirm it's a collection (parentOffers + childOffers pr
 
 **Q: What is the `onetimeCleanup` plan?**
 A `ONETIME` termType plan within a subscription offer (Website Security). It allows a one-time site cleanup purchase from the same offer definition. The `ONETIME` term type is the signal — not recurring, not billed again after initial purchase.
+
+**Q: How does FOS actually render CES prices, and what does that mean for experiments?**
+FOS does not hardcode prices. It uses pricing tokens that evaluate CES package data at render
+time. Example token for WAM plan cards:
+  `package[wsb-vnext-tier4].prices[12:month].salePrice[1:month]`
+Whatever the active CES package's sale price is, that is what every customer on that page sees.
+This creates two architectural constraints:
+
+**CES pricing is unidirectional.** FOS can only display prices ≤ the PFID catalog sale price.
+There is no mechanism to surcharge above the catalog price via a CES package. Experiments that
+want to TEST a higher price must first raise the catalog/PFID sale price globally, then use a
+discount code inside the control CES package to bring the control arm back to the original price.
+
+**CES package changes are site-wide blast radius.** All plan cards, PDPs, homepage modules,
+comparison tables, and any other page rendering that package are affected simultaneously.
+Scoping a CES package change to experiment arms only — without changing the underlying PFID
+sale price — is not possible.
+
+**Experiment implementation pattern (CES FOS price-up):**
+- Control arm: new CES package = PFID + discount code (renders current / original price)
+- Treatment arm(s): existing or new CES package = PFID only, no discount (renders new higher price)
+- Deployment: pricing change + discount code + CES package + FoS publish must deploy ATOMICALLY
+
+Confirmed and documented in AGIGROWTH-51. Canonical playbook:
+https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/4271539132/FOS+Experiments
 
 **Q: What is a `billingPolicyOverride` in `configKeyValues`?**
 A billing behavior override applied at the curated offer level. `planType: FREE_TRIAL` with `trialInfo: 7 days` means the customer gets 7 free days before billing starts. The `conversations-free-trial` offer uses this. `revisionNumber: 3` on that offer means it has been actively iterated — free trial flows tend to be maintained more actively than standard offers.

@@ -165,6 +165,13 @@ offer can be created." Not a skill defect; the NES curated offer landscape memor
 "vnext" or "WAM vnext" are frequently in this situation (expecting NES output for a
 known-CES-generation product family).
 
+**Skill coverage note (2026-05-16):** Option 2 surface label enrichment now annotates the
+ROUTE line and CES-ONLY SURFACE disclosure with the surface's NES/CES classification from
+the surface vocabulary. The analyst will see `ROUTE: CES Package — dpp_precheck (Domain
+Purchase Path — Pre-Check) is a known CES-dominant surface` as the first visible output
+line, before any catalog calls. This proactively surfaces the architecture reality without
+waiting for the analyst to reach the CES output and push back.
+
 ---
 
 ## HE-005
@@ -299,7 +306,7 @@ the analyst's stated champion even though billing shows zero rows for it.
 back. Active catalog entry does not confirm live status. Ask ecomm engineering to confirm
 the current live champion before cloning." This is Mixed because GAP-007 is a data
 limitation: the skill cannot detect rollbacks from catalog data alone. Cross-reference
-/gaps GAP-007 if this symptom recurs.
+/system-gaps GAP-007 if this symptom recurs.
 
 ---
 
@@ -334,8 +341,7 @@ re-run per surface anyway.
 "Offer-pulse is designed for one surface or experiment at a time — one EP ticket, one
 pricing change. For a broad audit across surfaces, I'd recommend running one per ITC.
 Which surface should we start with?" Not a skill defect; the skill's output scope is
-intentionally per-surface. For a surface inventory, /offer-pulse with a specific PFID
-at Step B2 Blast Radius mode is the closest match.
+intentionally per-surface. For pricing/discount scope across surfaces, use /pricing-ticket.
 
 ---
 
@@ -375,7 +381,7 @@ PFIDs confirmed via billing query, champion slugs via catalog MCP, discount code
 billing history. Treat this evaluation as directionally correct but with reduced confidence
 on ✗ criteria where the expected value was not independently sourced." This is Mixed —
 some failures are real skill gaps; others may be expectation calibration issues.
-Cross-reference /gaps for confirmed skill defects before invoking /wendy.
+Cross-reference /system-gaps for confirmed skill defects before invoking /wendy.
 
 ---
 
@@ -566,6 +572,43 @@ This is Mixed — the skill should fall back to the ID scan automatically (Chain
 which is the correct recovery path. If the ID scan also fails, investigate whether Chain
 Step 2 keyword seeds are sufficient for the product type before concluding the offer does
 not exist.
+
+---
+
+## HE-017
+Pattern    : FOS WAM experiment designed using NES curated offer path when surface is CES
+Status     : active
+Category   : Context Error
+Frequency  : Occasional (5–25%)
+Verdict    : Human Error Only
+Added      : 2026-05-17
+Evidence   : AGIGROWTH-51 (TrustedSite FOS experiment, Feb-Mar 2026). Team initially planned
+             4 curated offers (NES path) for 4 experiment arms. Corrected on 2026-02-18 to
+             CES packages. Confirmed via ticket comments and Confluence playbook.
+
+**What the analyst does:**
+When designing a multi-arm FOS pricing experiment, plans the implementation using NES curated
+offers — requesting one curated offer per arm (e.g. "+$2 Premium w/o TS", "+$2 Premium w/ TS",
+"+$3 Commerce w/o TS", "+$3 Commerce w/ TS"). The correct implementation for a CES FOS surface
+is CES packages: one control package (PFID + discount code), one or more treatment packages
+(PFID only, no discount). NES curated offers do not exist for FOS WAM surfaces (all SLP WAM
+surfaces are CES except slp_hosting_4gh).
+
+**How to detect:**
+- Ticket requests "curated offer" or "curated offer creation" for slp_wsb_*, slp_rstdstore,
+  or other confirmed-CES WAM surface
+- Analyst asks for one EP ticket per experiment arm (NES framing) when surface is CES
+- Experiment design uses phrases like "new curated offer for Treatment 1" on an FOS WAM context
+- Surface ITC is slp_* (not slp_hosting_4gh) and product is WAM/WSB
+
+**What to say:**
+"FOS WAM surfaces are CES — NES curated offers don't apply here. The correct path for a CES
+FOS pricing experiment is CES packages: raise the PFID sale price to the treatment level, then
+create a control CES package with a discount code that restores the current price. See the
+Confluence playbook: https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/4271539132/FOS+Experiments
+
+For the pricing ticket, this means: (1) a sale price increase request, (2) a discount code
+request for the control, (3) CES package creation — NOT a curated offer EP ticket."
 
 ---
 

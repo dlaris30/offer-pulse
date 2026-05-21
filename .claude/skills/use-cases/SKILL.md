@@ -5,7 +5,24 @@ description: Reads the offer-pulse use-case log, analyzes patterns across all lo
 
 # /use-cases — Offer Pulse Systemic Issue Analyzer
 
-Read-only. Does not run queries, call catalog tools, or modify any files. Produces a diagnostic report and a Wendy handoff brief.
+## Agent Mode (run in background)
+
+When invoked as a skill (`/use-cases`), spawn a background agent rather than running the analysis inline.
+
+1. Use the Agent tool:
+   - `subagent_type`: `general-purpose`
+   - `run_in_background`: `true`
+   - `description`: `"use-cases pattern analysis"`
+   - `prompt`: Read this SKILL.md and pass everything from **## Step 1 — Read the Log** onward — verbatim — as the agent's prompt.
+2. Confirm immediately (do not wait):
+   ```
+   /use-cases agent spawned.
+   Pattern analysis running in background — you'll be notified when the report is ready.
+   ```
+
+---
+
+Does not run queries or call catalog tools. Produces a diagnostic report, a Wendy handoff brief, and updates the branch map.
 
 ---
 
@@ -42,13 +59,9 @@ From the log entries, extract the following counts. Show all as absolute numbers
 |---|---|
 | Total runs | N |
 | Date range | {first entry date} to {last entry date} |
-| Path A (Curated Offer) | N ({pct}%) |
-| Path B (Pricing/Discount) | N ({pct}%) |
-| NES path (Path A) | N ({pct}% of Path A runs) |
-| CES path (Path A) | N ({pct}% of Path A runs) |
-| Mixed NES/CES (Path A) | N ({pct}% of Path A runs) |
-| PFID Inventory mode (Path B) | N ({pct}% of Path B runs) |
-| Blast Radius mode (Path B) | N ({pct}% of Path B runs) |
+| NES path | N ({pct}%) |
+| CES path | N ({pct}%) |
+| Mixed NES/CES | N ({pct}%) |
 | Champion found | N ({pct}%) |
 | Champion not found / NET-NEW BUILD | N ({pct}%) |
 | Ticket preview requested | N ({pct}%) |
@@ -119,8 +132,7 @@ Render all sections in this order. Never truncate any table.
 ```
 Offer Pulse — Systemic Issues Report
 Runs analyzed  : {N} runs ({first date} → {last date})
-Path split     : A: {N} ({pct}%) | B: {N} ({pct}%)
-NES/CES split  : NES: {pct}% | CES: {pct}% | Mixed: {pct}% (of Path A runs)
+NES/CES split  : NES: {pct}% | CES: {pct}% | Mixed: {pct}%
 Champion found : {N} ({pct}%) | Not found: {N} ({pct}%)
 Anomaly rate   : {N} runs with non-trivial Notes ({pct}%)
 ```
@@ -170,7 +182,7 @@ This brief is designed to be passed verbatim to Wendy. It should be actionable �
 
 Before rendering the Wendy prompt, run a user-gaps check on the top issue's symptom description.
 
-Invoke `/user-gaps check <top issue symptom>` using the issue title and root cause description from the Systemic Issues table as the symptom text.
+Invoke `/gaps check <top issue symptom>` using the issue title and root cause description from the Systemic Issues table as the symptom text.
 
 - If one or more patterns match with Verdict = `Human Error Only`: add a warning block before the Wendy prompt:
 
@@ -194,6 +206,18 @@ Invoke `/user-gaps check <top issue symptom>` using the issue title and root cau
 After the report, always end with:
 
 > "Would you like me to invoke `/wendy` to address issue #1? I'll pass the brief above as input — Wendy will produce a revised skill instruction for your review. No files will be changed until you approve."
+
+---
+
+---
+
+## Phase 2 — Branch Map Update
+
+After delivering the report, update the decision tree.
+
+Invoke the `/coverage` skill by reading and following `.claude/skills/coverage/SKILL.md` in tree update mode (pass `tree` as the argument).
+
+Output the change summary inline. No additional commentary needed.
 
 ---
 

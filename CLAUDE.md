@@ -8,15 +8,15 @@ A data capability to programmatically answer: "What exact offer was a customer s
 
 | Skill | Invoke | Purpose |
 |---|---|---|
-| `/offer-pulse` | `offer-pulse` | Given a Jira ticket, ITC, or product name → audit all offers on that surface → produce the full EP engineering payload (curated offer creation) or pricing ticket payload (PFID list + discount codes) |
+| `/offer-pulse` | `offer-pulse` | Given a Jira ticket, ITC, or product name → audit all offers on that surface → produce the full EP engineering payload (curated offer creation) |
 
 **`/offer-pulse` workflow:**
 1. Pass a Jira ticket key (e.g. `AGIGROWTH-161`), an ITC (e.g. `slp_wordpress`), or a product name (e.g. "MWP Basic")
 2. Skill queries 7-day billing + CLN data to find all active `package_id` values on that surface
 3. Classifies each as **Standalone Offer** or **Offer Collection**, then looks up all IDs via catalog MCP
-4. Outputs a ready-to-use payload for EP engineering (Curated Offer ID, Base Offer ID, all Component Offer IDs + per-component plans) or a pricing ticket (complete PFID list with current pricing and discount codes)
+4. Outputs a ready-to-use payload for EP engineering (Curated Offer ID, Base Offer ID, all Component Offer IDs + per-component plans) — ready for ecomm engineering ticket
 
-Supports **curated offer creation** (Path A) and **pricing / discount tickets** (Path B).
+Supports **curated offer creation** (NES path) and **CES package configuration** (CES path). For pricing/discount tickets, see `/pricing-ticket`.
 
 ## The Core Problem
 

@@ -419,7 +419,35 @@ From the B1 results, identify:
 
 **CES ITC handling (Blast Radius Mode only):**
 
-For each ITC with CES-only rows (all `package_id` null), run a lightweight lookup to provide a slug reference for discount code configuration:
+**FOS Price-Up Experiment Exception:** When ALL of the following are true — (1) ITC matches
+`LIKE 'slp_%'` (FOS surface), (2) surface is CES (package_id null), AND (3) context signals a
+treatment price HIGHER than the current catalog sale price (e.g. "+$2/mo", "premium → $16.99",
+"price increase") — emit this block before any other CES output:
+
+```
+⚠️ CES FOS PRICE-UP EXPERIMENT DETECTED
+Implementation path differs from a standard discount ticket.
+
+FOS prices come from CES package tokens at render time — FOS can only show prices ≤ the
+catalog sale price. To test a higher price, the pattern is:
+
+1. Raise the PFID sale price to the treatment price (affects ALL customers immediately)
+2. Create a discount code that nets back to the current (control) price
+3. Create a new CONTROL CES package = PFID + discount code
+4. Treatment CES packages = PFID only (renders raised price)
+
+⚠️ ATOMIC DEPLOYMENT REQUIRED: pricing change + discount code + CES package + FoS publish
+   must all deploy in a single coordinated window. Any step alone = site-wide pricing exposure.
+
+Canonical playbook: https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/4271539132/FOS+Experiments
+
+Producing the PFID list and price baseline below. The Discount Ticket Summary will note
+that TWO tickets are required: (1) sale price increase + (2) discount code for control.
+```
+
+**UPP exception:** For any ITC matching `LIKE 'upp_%'`, skip the merchandising API lookup entirely — UPP discount configuration goes through Hivemind, not the merchandising API. Still identify the PFID set for use in the Hivemind cohort JSON (see UPP Hivemind Configuration section below).
+
+For all other CES-only ITCs (all `package_id` null), run a lightweight lookup to provide a slug reference for discount code configuration:
 
 1. **Merchandising match:** Fetch `https://merchandising.api.godaddy.com/v1/packages`. Match the ITC's PFID set against `pfids[]` in each package. Classify as Exact, Superset, or Partial.
 2. **ID list scan (fallback):** If no merchandising match, scan `get_curated_offers(active=true)` for keyword matches against the ITC or product name. Do not run tag search — that level of resolution is not needed for a pricing ticket.
@@ -469,6 +497,7 @@ Before the PFID × ITC table, render a Flags table for any of these conditions. 
 | Flag | Detail |
 |---|---|
 | Scope summary | `{N}` distinct PFIDs × `{M}` distinct ITCs in scope |
+| UPP surface detected | One or more `upp_*` ITCs in scope — implementation path is Hivemind, not merchandising API. Path exclusions apply (BMAT, d2p). See UPP Hivemind Configuration section. |
 | CES-only surface | `{itc}` (`{N}` orders/30d) has no `package_id` — discount mechanism differs from NES |
 | Blast radius exceeds ticket scope | PFID `{pfid}` also appears on `{itc}` not listed in the ticket |
 | Existing discount code | PFID `{pfid}` on `{itc}` currently has code `{code}` — will be overridden |
@@ -478,7 +507,7 @@ Before the PFID × ITC table, render a Flags table for any of these conditions. 
 | PFID | Product Name | Term | ITC | Package ID | Offer Type | Current Discount Code | Total Orders (30d) | Avg Receipt Price | Avg List Price | Avg Catalog Sale Price |
 |---|---|---|---|---|---|---|---|---|---|---|
 
-**CES Offer Candidates** *(rendered only when one or more ITCs are CES-only and Step B2 CES lookup ran)*
+**CES Offer Candidates** *(rendered only when one or more non-UPP ITCs are CES-only and Step B2 CES lookup ran. UPP surfaces are excluded from this table — their discount path is Hivemind, not the merchandising API.)*
 
 | ITC | PFID | Product Name | Term | Tier | Discount Code | Existing CES Package | Found Via | Confidence |
 |---|---|---|---|---|---|---|---|---|
@@ -510,6 +539,43 @@ Existing codes to replace :  {code} on {itc} / PFID {pfid}; or "None"
 ```
 
 The `CES Slug Candidates` line is omitted if the surface is 100% NES or if PFID Inventory Mode was used.
+
+---
+
+### UPP Hivemind Configuration
+
+*Render only when one or more `upp_*` ITCs are present in B1 results. Render after the Discount Ticket Summary, before the Ticket Preview Prompt.*
+
+> ⚠️ **UPP SURFACE — IMPLEMENTATION PATH IS HIVEMIND, NOT MERCHANDISING API**
+>
+> Discount experiments on `upp_*` surfaces are configured in Hivemind using a cohort JSON
+> payload. The merchandising API and NES catalog are not in the UPP serving path.
+
+**Path exclusions (silent — no error is returned):**
+- **`d2p` conversion type** — direct-to-paid (new purchase) is not supported by UPP discount logic. ITCs containing `_d2p_` in the conversion_type segment are affected.
+- **BMAT customers** (Bill Me After Trial) — excluded by ecom billing agent limitation.
+
+**Hivemind configuration template:**
+
+```
+=== Hivemind Experiment Config ===
+Experiment name suffix  :  {name}UPPDCX       ← "UPPDCX" suffix required
+Label                   :  UPLIB               ← required; BOTH suffix AND label mandatory
+Cohort JSON             :  { "WAM product": ["{DISC-CODE-1}"] }
+                             key   = product type (e.g. "WAM product")
+                             value = discount code strings from pricing team (DISC-##### format)
+Propagation delay       :  ~25 min after saving before live
+Max simultaneous codes  :  2 per UPP session (cart checkout limited to 1)
+Bucketing               :  Shopper-level (logged-in users only)
+```
+
+**Test → Prod workflow:**
+1. Build in test → add yourself to variant approved list → verify (allow ~25 min propagation)
+2. "Copy to prod" creates a **separate copy** — does NOT promote the test experiment
+3. In prod: open duration calculator → coordinate with BA team (not self-served for in-product)
+4. Toggle traffic on → goes **live immediately** on toggle — be deliberate
+
+**Concurrent experiment warning:** UPP applies the best (lowest) price across all active experiments for a shopper. Never run two concurrent pricing experiments on the same cohort — run sequentially or use separate variants.
 
 ---
 

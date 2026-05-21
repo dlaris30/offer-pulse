@@ -432,3 +432,63 @@ Champion        : AMBIGUOUS — two architectures resolve for "basic tier": (1) 
 Flags fired     : Dual collection architecture on same surface — "basic tier" resolves to two structurally distinct NES bundles with different collection IDs and different email components; Tier naming collision — tier1 and tier4 are both "basic" in plan namespace (defaultBasicOfficebusinessps vs defaultBasicStartup) but belong to separate tier families; M365 vs Titan Email disambiguation required (575a7d2a officeBusinessPs vs 927a9d45 light); Duda plan=basic is identical in both architectures and cannot be used to disambiguate; disc000001 (M365 tiers) vs disc000007 (Titan tiers)
 Ticket preview  : Not requested
 Notes           : Tiers 1-3 use collection domainDudaEmail (7683d414), which carries M365 officeBusinessPs and supports multi-year terms (1/2/3 YEAR). Tiers 4-6 use collection domainProfessionalEmail (c377d7de), which carries Titan Email light and is annual-only (1 YEAR per collection schema). Both collections share NewDomainOffer (edf13c43) and dudaOffer (2c5e3bb2) components — Duda plan alone cannot disambiguate. The domainDudaEmail plan namespace is *OfficebusinessPs only; domainProfessionalEmail is *Startup only — non-overlapping plan families confirming architectural separation. A skill run without email product specified must not guess or default; it must disclose both architectures and block ticket output until disambiguation. Tier numbering is visible only in the curated offer slug, not in the plan field. Catalog-verified confidence: 100%.
+
+---
+
+## Wendy Measure — 2026-05-15T — i18nox vs wsb-vnext disambiguation on slp_wsb_* FOS surfaces
+
+Date             : 2026-05-15
+Audit type       : wendy-measure
+Change           : Add slp_wsb_* surface champion filter in Step A2b branch decision: prefer wsb-vnext-* over vnext-i18nox-* on non-DEM FOS surfaces; flag as AMBIGUOUS when no wsb-vnext-* sibling exists.
+Fix applied      : 2026-05-15
+Scope filter     : Runs where surface ITC matches slp_wsb_* AND merchandising API returned vnext-i18nox-* as candidate for WAM Commerce PFID
+Pre-fix rate     : 3/3 (100%)
+Post-fix rate    : 0/0 (N/A — fix applied this session; no post-fix runs yet)
+Delta            : N/A
+Verdict          : INCONCLUSIVE
+Notes            : Fix applied this session. Only 3 post-fix runs needed on slp_wsb_* WAM Commerce surfaces to confirm effectiveness. Re-run /ledger after next WAM Commerce FOS run.
+
+---
+
+## Wendy Measure — 2026-05-15T — Chain Step 2 NES-only slug disqualification when A2b returns zero matches
+
+Date             : 2026-05-15
+Audit type       : wendy-measure
+Change           : Add merchandising validation check before Chain Step 2 success declaration: when A2b returned zero matches, disqualify any slug absent from the A2b match list as DISQUALIFIED (NES-only); proceed to Chain Step 3 if all candidates disqualified.
+Fix applied      : 2026-05-15
+Scope filter     : CES runs where A2b returned zero merchandising matches AND Chain Step 2 executed (catalog-era products, new/pre-launch PFIDs)
+Pre-fix rate     : 0/7 (0%) — note: failure mode not observable in logged runs; WebFetch truncation prevented targeted slug retrieval; failure was only reproducible via batch-test agents using direct slug fetch
+Post-fix rate    : 0/0 (N/A — fix applied this session; no post-fix runs yet)
+Delta            : N/A
+Verdict          : INCONCLUSIVE
+Notes            : scope_post=0 — fix applied this session. The 0% pre-fix rate reflects a measurement gap: the failure mode was only observable in batch-test agents using targeted slug fetches, not in logged production runs that use truncated WebFetch. The fix addresses the keyword-scan path only; the targeted-fetch path (where agent fetches /v1/packages/{slug} directly and gets a PFID match) is not covered. Re-run /ledger after first post-fix batch-test or SSL surface production run.
+
+---
+
+## Wendy Measure — 2026-05-15T — M365 geo risk handling decision table
+
+Date             : 2026-05-15
+Audit type       : wendy-measure
+Change           : M365 geo risk handling — decision table for stated target market (BLOCK for IN / WARN for global-unspecified / no-action for developed-market-only)
+Fix applied      : 2026-05-15
+Scope filter     : Live runs where M365 appeared as a product or bundle component in the offer analysis output
+Pre-fix rate     : 5/10 (50%)
+Post-fix rate    : 0/0 (N/A — fix applied this session; no post-fix runs yet)
+Delta            : N/A
+Verdict          : INCONCLUSIVE
+Notes            : scope_post=0 — fix applied this session. 5 pre-fix triggers: MWP Basic SLP ROW+India (13T18:00), dpp_precheck M365 OE (13T22:00), dpp_precheck M365 OE full run (14T00:00), WAM+TrustedSite v1 (14T00:00), MWP Deluxe SLP (14T18:30) — all fired M365 geo risk flag with no downstream handling instruction. Re-run /ledger after first M365-component offer run post-fix.
+
+---
+
+## Wendy Measure — 2026-05-17T — Chain Step 1 NES-vs-CES validity check on CES surfaces
+
+Date             : 2026-05-17
+Audit type       : wendy-measure
+Change           : NES-vs-CES validity check in Chain Step 1 success block — when get_curated_offer returns active for A2b merchandising match slug, confirm slug was present in A2b PFID match table; if absent (NES-only offer), emit NES reference block + NET-NEW BUILD instead of treating chain as resolved
+Fix applied      : 2026-05-17
+Scope filter     : CES-100% runs where Chain Step 1 executed with a successful curated offer match from A2b merchandising
+Pre-fix rate     : 0/5 (0%) — failure mode not triggered in logged production runs; identified only via CMS-31766 batch-test (blind eval excluded from counts)
+Post-fix rate    : 0/0 (N/A — fix applied this session; no post-fix runs yet)
+Delta            : N/A
+Verdict          : INCONCLUSIVE
+Notes            : scope_post=0. Pre-fix rate was 0% in logged runs; failure mode detected via batch-test only. WebFetch truncation in production runs likely prevented the bug from manifesting — if A2b WebFetch couldn't retrieve the NES-only slug from a truncated response, Chain Step 1 wouldn't fire for that slug. Fix targets the targeted-fetch path used by batch-test agents. Note: Wendy's fix targets Chain Step 1 but CMS-31766's actual failure path goes through Chain Step 2 — fix does not resolve CMS-31766. Re-run /ledger after first CES surface Chain Step 1 run where a slug is fetched directly.
