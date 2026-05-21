@@ -45,6 +45,13 @@ Run this once a week to get the latest skill improvements:
 cd ~/projects/offer-pulse && git pull
 ```
 
+**What git pull will and won't affect:**
+- ✅ Safe — your memory files (`~/.claude/projects/.../memory/`) are outside the repo and never touched
+- ✅ Safe — any custom skills you built with unique names won't be touched
+- ⚠️ Overwritten — if you edited any of the 10 skill files directly, `git pull` will replace your changes with the latest version
+
+**If you've customized a skill file:** don't edit the cloned files. Build a separate skill with a different name — it will be ignored by git and safe from all future updates.
+
 ---
 
 ## Usage
