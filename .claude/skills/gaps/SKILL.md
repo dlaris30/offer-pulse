@@ -10,7 +10,7 @@ A unified persistent log for two distinct gap types:
 - **User patterns** (HE-NNN) — recurring analyst input mistakes that the skill cannot fix
 
 **Log files:**
-- `.claude/skills/system-gaps/gaps-log.md` — system gaps
+- `.claude/skills/gaps/gaps-log.md` — system gaps
 - `.claude/skills/user-gaps/error-log.md` — user error patterns
 
 Both files survive session boundaries. All IDs are permanent.
@@ -74,7 +74,7 @@ Determine operation and type from args:
 
 ## Step 2 — Read the Logs
 
-For operations that need system gaps: read `.claude/skills/system-gaps/gaps-log.md`.
+For operations that need system gaps: read `.claude/skills/gaps/gaps-log.md`.
 For operations that need user patterns: read `.claude/skills/user-gaps/error-log.md`.
 For **Check**, **List Both**, **Add (routing check)**, and **Summary**: read both files.
 
