@@ -11,14 +11,14 @@
 
 **1. Clone the repo**
 ```bash
-git clone https://github.com/dlaris30/offer-pulse.git ~/offer-pulse
+git clone https://github.com/dlaris30/offer-pulse.git ~/projects/offer-pulse
 ```
 
 **2. Add the launch alias to your shell config**
 
 Open `~/.bashrc` (or `~/.zshrc` if you use zsh) and add:
 ```bash
-alias offer-pulse='cd ~/offer-pulse && claude'
+alias offer-pulse='cd ~/projects/offer-pulse && claude'
 ```
 
 Then reload it:
@@ -42,7 +42,7 @@ That's it. Claude Code opens in the Offer Pulse environment with all skills load
 
 Run this once a week to get the latest skill improvements:
 ```bash
-cd ~/offer-pulse && git pull
+cd ~/projects/offer-pulse && git pull
 ```
 
 ---
@@ -55,6 +55,41 @@ At the Claude Code prompt, type `/offer-pulse` and provide one of:
 - A product name (e.g. `MWP Basic`)
 
 The skill audits all active offers on that surface and produces a ready-to-use payload for an ecomm engineering ticket.
+
+---
+
+## Already have the skill files? Migrate to the repo
+
+If you previously copied skill files (e.g. `offer-pulse/SKILL.md`) directly into your `~/.claude/skills/` folder, follow these steps to switch to the repo instead.
+
+**1. Clone the repo**
+```bash
+git clone https://github.com/dlaris30/offer-pulse.git ~/projects/offer-pulse
+```
+
+**2. Remove the files you copied in manually**
+```bash
+rm -rf ~/.claude/skills/offer-pulse
+rm -rf ~/.claude/skills/ces-nes
+rm -rf ~/.claude/skills/surface-vocab
+rm -rf ~/.claude/skills/package-catalog
+rm -rf ~/.claude/skills/migration-check
+rm -rf ~/.claude/skills/ces-packages
+rm -rf ~/.claude/skills/pricing-ticket
+rm -rf ~/.claude/skills/ref
+rm -rf ~/.claude/skills/gaps
+rm -rf ~/.claude/skills/tribal-knowledge
+```
+
+Only remove the folders you actually have — skip any that don't exist.
+
+**3. Add the launch alias** (same as above)
+```bash
+alias offer-pulse='cd ~/projects/offer-pulse && claude'
+source ~/.bashrc
+```
+
+From now on, launch with `offer-pulse` and update with `cd ~/projects/offer-pulse && git pull`.
 
 ---
 
