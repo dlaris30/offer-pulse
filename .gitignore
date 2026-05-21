@@ -1,3 +1,20 @@
 .claude/settings.local.json
 .claude/projects/
 Reference Docs/
+
+# Internal QA skills — local only, not distributed
+.claude/skills/scorer/
+.claude/skills/batch-test/
+.claude/skills/golden-set/
+.claude/skills/overnight/
+.claude/skills/use-cases/
+.claude/skills/measure/
+.claude/skills/ledger/
+.claude/skills/wendy/
+.claude/skills/compare/
+.claude/skills/coverage/
+.claude/skills/freshness/
+.claude/skills/branch-map/
+.claude/skills/offer-matrix/
+.claude/skills/surface-profile/
+.claude/skills/offer-pulse-external/
