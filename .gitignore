@@ -2,6 +2,9 @@
 .claude/projects/
 Reference Docs/
 
+# Internal agents — local only, not distributed
+.claude/agents/wendy.md
+
 # Internal QA skills — local only, not distributed
 .claude/skills/scorer/
 .claude/skills/batch-test/

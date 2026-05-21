@@ -83,46 +83,9 @@ Output the reference card below verbatim. Do not read any other files.
 
 /gaps [check | list | add | resolve]
   Unified issue tracker: GAP-NNN (skill defects) + HE-NNN (analyst
-  input errors). Run /gaps check before any Wendy fix to rule out
-  user error.
-
-── IMPROVEMENT LOOP ────────────────────────────────────────────────
-
-/overnight                                         [spawns agent: bg]
-  Autonomous unattended loop: freshness → regression detection →
-  Wendy fix (if needed) → surface vocab expansion → branch map →
-  offer matrix → package catalog.
-
-/wendy <design brief>                              [spawns agent: bg]
-  Skill architect agent. Designs new skills and fixes to SKILL.md.
-  Pre-checks: ledger pre-flight + CES/NES architecture review.
-  Does NOT run queries.
-
-/use-cases                                         [spawns agent: bg]
-  Read the use-case log, find systemic patterns, flag top issue,
-  emit a Wendy-ready brief. Starting point for improvement cycles.
-
-/ledger [pre-flight | measure <issue>]
-  Mode A (pre-flight): devil's advocate before Wendy designs a fix.
-  Mode B (measure): pre/post-fix flag rate comparison + log entry.
-
-/freshness
-  Staleness check for all reference files (package-catalog,
-  ces-packages, surface-vocab, golden-set, coverage, ces-nes).
-  Lightweight — feeds /overnight phase 1.
-
-/compare <run-A> <run-B>
-  Diff two offer-pulse run outputs: champion changes, packages
-  added/removed, geometry shifts, new flags. Answers "what changed?"
+  input errors). Run /gaps check to rule out user error.
 
 ── AGENT TYPES (subagent_type values) ──────────────────────────────
-  Skills marked [spawns agent] above delegate to one of these.
-  Can also be invoked directly via the Agent tool.
-
-Agent: wendy
-  Offer Pulse architect. Designs new skills, audits skill gaps,
-  proposes instruction set improvements. Does NOT run queries.
-  ← used by: /wendy
 
 Agent: general-purpose
   Open-ended research, multi-step investigation, codebase search

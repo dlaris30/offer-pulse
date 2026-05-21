@@ -234,7 +234,7 @@ Read the title/description provided. Ask: "Is this a skill defect (something fix
 
 ### Check
 
-**This is the primary pre-Wendy gate.** Always run this before invoking `/wendy` or acting on a `/use-cases` systemic issue.
+Run this before acting on any systemic issue to confirm it is skill-caused, not input-caused.
 
 Input: symptom text after "check".
 
@@ -269,7 +269,7 @@ Match     : "{keyword}" matched detection signals
 
 What to say: {paste the "What to say" block}
 
-→ Before invoking /wendy: confirm this is skill-caused, not input-caused.
+→ Confirm this is skill-caused, not input-caused, before escalating.
 ```
 
 For user patterns where Verdict = `Mixed — Investigate`: add:
@@ -278,7 +278,7 @@ For user patterns where Verdict = `Mixed — Investigate`: add:
 If no matches in either log:
 ```
 No matching patterns found in either log for: "{symptom}"
-Proceed to /use-cases or /wendy — no known user-gap precedent.
+No known user-gap precedent — this may be a skill issue. Contact dlaris30.
 ```
 
 After both log sections, run the **Cross-log check** against tribal-knowledge (Step 4).
