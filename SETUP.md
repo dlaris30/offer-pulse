@@ -1,20 +1,99 @@
 # Offer Pulse — Setup Guide
 
-## Prerequisites
-
-- **Claude Code CLI** installed and authenticated
-- **distillery-mcp** configured in your Claude Code settings (contact dlaris30 if needed)
+Offer Pulse is a **dedicated Claude Code environment** — not a plugin you add to an existing project. You launch it in its own session from the cloned repo. All skills and context load automatically when you open it.
 
 ---
 
-## One-Time Install
+## Step 1 — Set Up the Required MCPs
 
-**1. Clone the repo**
+Offer Pulse depends on three MCP servers. Complete all three before cloning the repo.
+
+---
+
+### 1a — distillery-mcp (Redshift + Alation)
+
+This is the primary data connection. Full instructions are at the repo:
+👉 https://github.com/gdcorp-dna/distillery-mcp
+
+**Critical path:**
+
+**Authenticate with GitHub (one-time)**
+```bash
+gh auth login
+```
+Select GitHub.com → HTTPS → Login with a web browser. When prompted, authorize SSO for GoDaddy.
+
+**Clone and install**
+```bash
+git clone https://github.com/gdcorp-dna/distillery-mcp.git ~/projects/distillery-mcp
+cd ~/projects/distillery-mcp
+python3 install.py
+```
+The installer will prompt for your Redshift and Alation credentials and generate the Claude Code config. **Allow ~10 minutes.**
+
+You'll need:
+- Redshift host, username, and password
+- Alation refresh token (from your Alation profile settings page)
+- Alation user ID (found in the URL when you open your Alation profile)
+- Alation data source ID (ask your team if unsure)
+
+**Configure Claude Code** — the installer will show you a JSON snippet. Add it to your VS Code `settings.json`:
+```json
+{
+  "claude.mcpServers": {
+    "distillery": {
+      "command": "/home/yourusername/projects/distillery-mcp/.venv/bin/python",
+      "args": ["-m", "src"],
+      "cwd": "/home/yourusername/projects/distillery-mcp"
+    }
+  }
+}
+```
+Replace `yourusername` with your actual username.
+
+**Verify**
+```bash
+python3 install.py --verify
+```
+Then open Claude Code and try: *"Show me my Redshift schemas"*
+
+> **VPN required.** Claude Code routes through GoCaaS. If Claude can't reach the API, connect to VPN first.
+
+> **API key expiry.** GoCaaS keys expire every 30 days. When yours expires you'll see an `Authentication Error - Expired Key` message. Generate a new key from GoCaaS and update `ANTHROPIC_API_KEY` in your `~/.bashrc`, then run `source ~/.bashrc`.
+
+---
+
+### 1b — Atlassian MCP (Jira + Confluence)
+
+Full instructions: 👉 https://godaddy-corp.atlassian.net/wiki/spaces/ERI/pages/4192470027/Claude+Code+Not+just+for+developers#Atlassian-MCP
+
+**Add the server:**
+```bash
+claude mcp add --transport http atlassian https://mcp.atlassian.com/v1/mcp
+```
+Authentication is via OAuth — no API tokens needed. The first time you use an Atlassian tool, Claude will open your browser to authenticate. If that doesn't trigger automatically, open Claude Code, type `/mcp`, select the Atlassian server, and authenticate from there.
+
+---
+
+### 1c — Catalog MCP (NES offer catalog)
+
+```bash
+claude mcp add --transport http catalog-mcp-dev https://catalog-mcp.ecomm.int.test-gdcorp.tools/mcp --scope user
+```
+
+No additional authentication required.
+
+---
+
+## Step 2 — Clone the Offer Pulse Repo
+
 ```bash
 git clone https://github.com/dlaris30/offer-pulse.git ~/projects/offer-pulse
 ```
 
-**2. Add the launch alias to your shell config**
+---
+
+## Step 3 — Add the Launch Alias
 
 Open `~/.bashrc` (or `~/.zshrc` if you use zsh) and add:
 ```bash
@@ -34,7 +113,7 @@ source ~/.bashrc
 offer-pulse
 ```
 
-That's it. Claude Code opens in the Offer Pulse environment with all skills loaded.
+Claude Code opens in the Offer Pulse environment with all skills and MCP connections loaded.
 
 ---
 
