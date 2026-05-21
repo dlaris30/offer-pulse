@@ -2473,6 +2473,3 @@ When the analyst replies `save <case_id>` after a Validation Block:
 When the analyst replies `skip`:
 
 Do nothing. Continue normally.
-
-
-DANIEL WAS HERE - DANIEL WAS HERE
