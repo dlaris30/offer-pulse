@@ -155,16 +155,7 @@ git clone https://github.com/dlaris30/offer-pulse.git ~/projects/offer-pulse
 
 **2. Remove the files you copied in manually**
 ```bash
-rm -rf ~/.claude/skills/offer-pulse
-rm -rf ~/.claude/skills/ces-nes
-rm -rf ~/.claude/skills/surface-vocab
-rm -rf ~/.claude/skills/package-catalog
-rm -rf ~/.claude/skills/migration-check
-rm -rf ~/.claude/skills/ces-packages
-rm -rf ~/.claude/skills/pricing-ticket
-rm -rf ~/.claude/skills/ref
-rm -rf ~/.claude/skills/gaps
-rm -rf ~/.claude/skills/tribal-knowledge
+rm -rf ~/.claude/skills/offer-pulse-external
 ```
 
 Only remove the folders you actually have — skip any that don't exist.
