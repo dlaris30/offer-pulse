@@ -1493,3 +1493,39 @@ Resolution : —
 Resolved   : —
 
 ---
+
+## GAP-043
+Title      : offer-pulse → pricing-ticket handoff: ghost IDs and V3 offers need graceful
+             fallback — Entry Option 0 must not attempt catalog resolution on inherited context
+Status     : open
+Category   : Skill Gap
+Skill      : pricing-ticket
+Added      : 2026-05-22
+Evidence   : ces-nes architectural review 2026-05-22; pre-implementation check before
+             Entry Option 0 (post-offer-pulse handoff) is built
+
+When the offer-pulse → pricing-ticket handoff is implemented (Entry Option 0), the inherited
+package_id may be a ghost ID (NOT FOUND in catalog even after nes- prefix strip) or a V3
+apiVersion record (offerIds[] UUIDs not resolvable via V2 endpoint). If Entry Option 0 attempts
+catalog resolution on inherited context, it will fail silently or produce a misleading NOT FOUND.
+
+Three cases to handle safely:
+1. Ghost package_id (nes-wss-*, offer-* prefix, confirmed unresolvable) — carry the slug as
+   display context only; do not call get_curated_offer; emit: "Package ID {slug} is a known
+   ghost — catalog resolution skipped. Proceeding with PFID list inherited from offer-pulse."
+2. V3 apiVersion offer — get_curated_offer returns a record but offerIds[] are internal UUIDs
+   that return NOT FOUND via get_offer_definition_by_id. Entry Option 0 only needs the slug
+   and plan name for the pricing ticket; do not attempt component decomposition for V3 records.
+3. CES surface (package_id null in inherited context) — no catalog call needed; use PFID list
+   directly. Do not query "WHERE package_id = {champion}" for discount code lookup — use
+   item_tracking_code + pf_id filter against offer_pulse_experiment instead.
+
+Fix direction: build these three cases into Entry Option 0 explicitly. Each is a routing
+decision at the top of Entry Option 0 before any catalog calls. V3 detection = check apiVersion
+field from get_curated_offer response; ghost detection = NOT FOUND after nes- strip; CES =
+package_id null in inherited context.
+
+Resolution : —
+Resolved   : —
+
+---

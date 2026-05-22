@@ -11,7 +11,7 @@ A unified persistent log for two distinct gap types:
 
 **Log files:**
 - `.claude/skills/gaps/gaps-log.md` — system gaps
-- `.claude/skills/user-gaps/error-log.md` — user error patterns
+- `.claude/skills/gaps/error-log.md` — user error patterns
 
 Both files survive session boundaries. All IDs are permanent.
 
@@ -75,7 +75,7 @@ Determine operation and type from args:
 ## Step 2 — Read the Logs
 
 For operations that need system gaps: read `.claude/skills/gaps/gaps-log.md`.
-For operations that need user patterns: read `.claude/skills/user-gaps/error-log.md`.
+For operations that need user patterns: read `.claude/skills/gaps/error-log.md`.
 For **Check**, **List Both**, **Add (routing check)**, and **Summary**: read both files.
 
 If a file does not exist, treat as empty. For Add operations, create the file if needed.

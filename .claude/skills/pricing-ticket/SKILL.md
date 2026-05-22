@@ -177,9 +177,16 @@ If one or more questions cannot be resolved, collect all into a single numbered 
    - **Surface / ITC** — map using Surface Name → ITC Map above
    - **Product / PFID** — if explicitly called out
    - **Target price** — any explicit price point stated. Record as `Target Price (from ticket)`.
-   - **New discount codes** — any explicitly named code not yet in billing. Record as `Discount (from ticket)`.
+   - **New discount codes** — any explicitly named code not yet in billing. Record as `Proposed Code (from ticket)`.
    - **Billing term** — scan for term signals in priority order: (1) PFID/product table with a term or duration column (e.g. "1 Year", "12mo", "Annual"); (2) package slug encoding (`-1yr`, `-3yr`, `-annual`, `-monthly`); (3) experiment scope field for phrases in the Dimension 3 pre-parse signal table; (4) ticket title. If any signal is unambiguous, record as `Term (from ticket): {value}` and skip Dimension 3. If multiple signals conflict (e.g. title says "annual" but PFID table has 3-year rows), record both and ask for confirmation using the confirmation form: "I see annual in the title but 3-year PFIDs in the table — which term scope should this cover?"
    - **Offers being removed** — any language describing packages or products being replaced. Record verbatim.
+   - **Renewal price** — any explicit renewal price stated (e.g. "$14.99/mo standard list — no price lock"). Record as `Renewal Price (from ticket)`.
+   - **COGS / margin data** — any COGS or gross margin figures stated (e.g. "COGS $2.96/mo"). Record as `COGS (from ticket)`.
+   - **Financial impact / iGCR** — any projected GCR/iGCR figures or sizing tables. Record as `Financial Impact (from ticket)`.
+   - **Expiration / duration** — any time limit on the code (e.g. "3 months from today", "1/1/2048"). Record as `Expiration (from ticket)`.
+   - **Redemption restrictions** — 1 per shopper, per-customer limits, shopper list required, BMAT exclusion. Record as `Redemption Limits (from ticket)`.
+   - **Clone from** — any reference to cloning an existing code (e.g. "clone from DISCWAMUPP"). Record as `Clone From (from ticket)`.
+   - **Gate dependencies** — any tickets that must launch before this code goes live (e.g. "gated on AGIGROWTH-35"). Record as `Gate (from ticket)`.
 3. **Ticket type classifier (run before gate):** Scan for signals indicating no pricing ticket is needed:
 
    | Signal type | Example signals | Early-exit label |
@@ -411,7 +418,9 @@ From the B1 results, identify:
 - **All distinct PFIDs** in scope
 - **All distinct ITCs** (the blast radius)
 - **All distinct package_ids** — each may need its own discount code configuration
-- **Existing active discount codes** per PFID × ITC × package_id — flag real codes vs UUID placeholders
+- **Existing active discount codes** per PFID × ITC × package_id — sourced differently by system:
+  - **NES (package_id non-null):** call `get_curated_offer(datasource=catalog-curated-offers, curatedOfferId=<package_id>)` and read `discountCodes[]`. This is the authoritative configured code. Do NOT use `item_discount_code` from billing for NES — it is a historical observation, not the current catalog state.
+  - **CES (package_id null):** use `item_discount_code` from B1 billing data. No catalog record exists.
 - **Current pricing** (receipt vs list vs catalog sale) — anchor for the new discount target
 - **NES vs CES split** per PFID — affects how the discount is applied
 
@@ -517,7 +526,7 @@ One row per PFID × Term within each CES ITC. Omit this table entirely if no CES
 Column definitions:
 - **Term** — `product_term_num` + `product_term_unit_desc` combined (e.g. "1 Year")
 - **Tier** — `product_pnl_subline_name`; if null, use `product_pnl_line_name`
-- **Discount Code** — `item_discount_code` from B1; UUID placeholder → write "None"
+- **Discount Code** — NES rows: `discountCodes[]` from `get_curated_offer` (catalog MCP); CES rows: `item_discount_code` from B1 billing data. UUID placeholder → write "None"
 - **Existing CES Package** — slug from merchandising match or ID scan; "Not found" if both failed
 - **Found Via**: `Merchandising — exact`, `Merchandising — superset`, `Merchandising — partial`, `ID scan`, `—`
 - **Confidence**: `High`, `Medium`, `None`
@@ -534,8 +543,17 @@ PFIDs to include          :  {pfid1}, {pfid2}, ...
 Package IDs (NES)         :  {package_id1}, {package_id2}, ... (or "None — CES only")
 CES Slug Candidates       :  {slug} on {itc} (unconfirmed — see CES Offer Candidates above); or "None found"
 ITCs in scope             :  {itc1}, {itc2}, ...
-Price baseline            :  PFID {pfid} → avg receipt ${price} / avg list ${list} per term; ...
+Price baseline            :  PFID {pfid} → avg receipt ${price} / avg list ${list} / catalog sale ${sale} per term; ...
 Existing codes to replace :  {code} on {itc} / PFID {pfid}; or "None"
+--- Ticket Config (analyst-supplied) ---
+Target price / discount   :  {from ticket — e.g. "$3.99/mo", "80% off list"} (or "analyst to provide before ticket")
+Renewal price             :  {from ticket or "analyst to confirm — standard list or price-lock?"}
+Proposed code name        :  {from ticket or "pricing team to assign"}
+Expiration date           :  {from ticket or "TBD"}
+Clone from                :  {from ticket or "—"}
+Redemption limits         :  {from ticket — e.g. "1 per shopper" / "unlimited" / "shopper list required" or "analyst to specify"}
+COGS                      :  {from ticket or "analyst to confirm before submitting"}
+Gate dependencies         :  {from ticket — ticket(s) that must launch first; or "None"}
 ```
 
 The `CES Slug Candidates` line is omitted if the surface is 100% NES or if PFID Inventory Mode was used.
@@ -587,15 +605,28 @@ If the ticket mentions multiple surfaces (e.g. "DPP and SLP"), run the B1 query 
 
 ## Post-Output: Ticket Preview Prompt
 
-After all output is rendered, append:
+After all output is rendered, always end with:
 
-> "Would you like to see a draft of the **pricing or discount team ticket request**? I'll format it for copy-paste — no ticket will be created."
+> "Would you like me to draft the content for the **PRICING ticket**? I'll format it for copy-paste — no ticket will be created."
 
-If yes, render the appropriate preview based on which B1 mode was used.
+**Never render the ticket draft unless the analyst explicitly says yes.** Do not skip straight to the draft even if all required fields are already known.
 
-**HARD CONSTRAINT — READ ONLY:** Never call `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue`, or any write-capable Atlassian tool as part of this preview. Display only.
+**When the analyst says yes:**
 
-Do not show the preview if the analyst said they do not want a ticket, or if the output ended with no results.
+Check the Discount Ticket Summary for the Ticket Config section. Identify which required fields are already populated (from the originating AGIGROWTH ticket or the analyst's entry) and which are missing. Required fields: target price, renewal price, proposed code name, expiration date.
+
+- **If all required fields are populated:** render the Ticket Preview immediately.
+- **If any required fields are missing:** ask only for the missing ones. Optional fields (COGS, financial impact, redemption restrictions, clone from) can be left as placeholders — do not block on them. Use this format:
+
+  > "Before I draft the ticket, I need a few values I can't pull from billing data:
+  >
+  > {numbered list of only the missing required fields}"
+
+  When the analyst provides the values, render the Ticket Preview.
+
+**HARD CONSTRAINT — READ ONLY:** Never call `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue`, or any write-capable Atlassian tool. Display only.
+
+Do not show the preview if the analyst declines, or if the output ended with no results.
 
 ---
 
@@ -607,35 +638,85 @@ Do not show the preview if the analyst said they do not want a ticket, or if the
 === Ticket Preview: Pricing / Discount Ticket Request ===
 
   Summary line (copy into Jira Summary field):
-  [Pricing] {product name} — {term} — {market(s)} — {new/existing/both} — {discount target or price change description}
+  [Pricing] {product name} — {term} — {market(s)} — {new/existing/both} — {promotional price or discount description}
+  {If AGIGROWTH-linked, append: | {surface type} A/B Test ({AGIGROWTH-XXX}) }
 
-  Description:
+  ---
 
-  **PFIDs to apply discount / price change:**
-  {one line per row in the PFID Inventory Table}
-  - {pfid}: {product_name}, {term} — existing orders: {existing_orders}, new orders: {new_orders}
-    Current avg US receipt: ${avg_us_receipt_price} | list: ${avg_us_list_price} | catalog sale: ${avg_us_catalog_sale_price}
+  ## Overview
 
-  **Package IDs (NES curated offers, if applicable):** {package_id list or "None — CES only"}
+  {If AGIGROWTH ticket provided:}
+  This code supports the challenger offer in **{AGIGROWTH-XXX}** — {one-sentence description of what is being tested}.
 
-  **ITCs in scope:** {from Discount Ticket Summary ITCs field}
+  {If standalone discount request:}
+  [Analyst to complete — describe the change and business reason]
 
-  **Existing discount codes to replace:** {from Discount Ticket Summary — or "None"}
+  ---
 
-  **Term scope:** {from Term Scope header}
+  ## Discount Details
 
-  **Market / Geo scope:** {markets from request}
+  | Field | Value |
+  |---|---|
+  | SKU | {product_name} |
+  | PFID(s) | {pfid1}, {pfid2}, ... |
+  | Current list price | ${avg_us_list_price}/{term_abbrev} |
+  | Current sale price | ${avg_us_catalog_sale_price}/{term_abbrev} |
+  | Promotional price | **{target_price}** |
+  | Discount amount | ${list - target}/{term_abbrev} off list |
+  | Term | {N} {unit} |
+  | Renewal price | {renewal_price — e.g. "Standard list ($X/mo) — no price lock"} |
+  | Market | {markets} |
+  | Surface / ITC | {ITC(s) from Discount Ticket Summary} |
+  | Eligibility | {new / existing / both} |
+  | Proposed code name | **{code name or "pricing team to assign"}** |
+  | Expiration date | {expiration or "TBD"} |
+  | Redemption limits | {1 per shopper / unlimited / shopper list required} |
+  | Clone from | {code to clone or "—"} |
 
-  **Customer segment:** {new / existing / both}
+  **Package IDs (NES):** {package_id list or "None — CES only"}
 
-  **Notes / flags for pricing team:**
+  ---
+
+  ## COGS & Margin
+
+  {If COGS provided:}
+  COGS for {product_name} under current contract: ${cogs}/{term_abbrev}
+  At {target_price}: gross margin = ${target - cogs}/{term_abbrev} — **margin-positive** ✅
+  At renewal ({renewal_price}): gross margin = ${renewal - cogs}/{term_abbrev}
+
+  {If COGS not provided:}
+  [Analyst to confirm COGS for {product_name} under current contract. Verify margin-positive at {target_price} before submitting.]
+
+  ---
+
+  ## Financial Impact
+
+  {If iGCR data provided:}
+  {paste financial impact table from AGIGROWTH ticket or analyst}
+
+  {If not provided:}
+  [Analyst to complete — insert iGCR/GCR projection from {AGIGROWTH-XXX} or sizing document]
+
+  ---
+
+  ## Notes / Flags for Pricing Team
   {one line per row in the Flags table — omit section if no flags}
   - {flag}: {detail}
 
-  **Requested change:** [analyst to complete — e.g. "Apply DISC123456 to all PFIDs above on slp_wordpress for new customers, 1-year term"]
+  ---
+
+  ## Related
+  {If AGIGROWTH:} * **{AGIGROWTH-XXX}**: {ticket summary}
+  {If gate dependency:} * ⚠️ Gate: must launch **{OTHER-TICKET}** before this code goes live
+  {If prior PRICING reference:} * Prior reference: **{PRICING-XXXXX}**
+
+  ---
 
   Acceptance criteria:
-  - [ ] Discount code applied to all PFIDs listed above
+  - [ ] Discount code applied to all PFIDs listed in Discount Details
+  - [ ] Promotional price and discount amount confirmed with requesting team
+  - [ ] Renewal price confirmed (standard list vs. price-lock)
+  - [ ] COGS/margin verified — confirm margin-positive at promotional price
   - [ ] Code scoped to correct ITCs — no unintended blast radius
   - [ ] Existing codes verified as safe to override
   {if Flags table included "Zero US USD pricing" or "Unexpected product match":}
@@ -652,38 +733,106 @@ Do not show the preview if the analyst said they do not want a ticket, or if the
 === Ticket Preview: Pricing / Discount Ticket Request ===
 
   Summary line (copy into Jira Summary field):
-  [Pricing] {product name} — {term} — {ITC(s)} — {market(s)} — {discount target or price change description}
+  [Pricing] {product name} — {term} — {market(s)} — {promotional price or discount description}
+  {If AGIGROWTH-linked, append: | {surface type} A/B Test ({AGIGROWTH-XXX}) }
 
-  Description:
+  ---
 
-  **PFIDs × ITC combinations in scope:**
-  {one line per distinct PFID × ITC pairing from the Complete PFID × ITC Inventory table}
-  - {pfid} ({product_name}, {term}) on {itc}: offer type {NES/CES}, current code {code or "none"}, {N} orders/30d
+  ## Overview
 
-  **Package IDs (NES):** {from Discount Ticket Summary Package IDs field}
+  {If AGIGROWTH ticket provided:}
+  This code supports the challenger offer in **{AGIGROWTH-XXX}** — {one-sentence description}.
+  {If multi-arm:} Note: This covers **Code {N}: {code name}** — one PRICING ticket per arm that changes pricing.
 
-  **CES slug candidates:** {from Discount Ticket Summary CES Slug Candidates field — or omit if NES only}
+  {If standalone:}
+  [Analyst to complete — describe the change and business reason]
 
-  **Existing discount codes to replace:** {from Discount Ticket Summary Existing codes field — or "None"}
+  ---
 
-  **Term scope:** {from Term Scope header}
+  ## Discount Details
 
-  **Market / Geo scope:** {markets from request}
+  | Field | Value |
+  |---|---|
+  | SKU | {product_name} |
+  | PFID | {pfid} |
+  | Current list price | ${avg_catalog_list_price}/{term_abbrev} |
+  | Current sale price | ${avg_catalog_sale_price}/{term_abbrev} |
+  | Promotional price | **{target_price}** |
+  | Discount amount | ${list - target}/{term_abbrev} off list |
+  | Term | {N} {unit} |
+  | Renewal price | {renewal_price — e.g. "Standard list ($X/mo) — no price lock"} |
+  | Market | {markets} |
+  | Surface / ITC | {ITC(s)} |
+  | Eligibility | {new / existing / both} |
+  | Proposed code name | **{code name or "pricing team to assign"}** |
+  | Expiration date | {expiration or "TBD"} |
+  | Redemption limits | {1 per shopper / unlimited / shopper list required} |
+  | Clone from | {code to clone or "—"} |
 
-  **Customer segment:** {new / existing / both}
+  {If NES:}
+  **Package IDs (NES):** {package_ids} — discount code must be configured in the NES catalog for each package.
+  {If CES:}
+  **CES slug candidates:** {slugs — see CES Offer Candidates above; confirm with merchandising team before applying}
+  {If UPP surface:}
+  > ⚠️ **UPP surface** — Discount goes into Hivemind cohort JSON (UPPDCX suffix + UPLIB label), not the merchandising API. See UPP Hivemind Configuration above.
 
-  **Notes / flags for pricing team:**
+  ---
+
+  ## COGS & Margin
+
+  {If COGS provided:}
+  COGS for {product_name} under current contract: ${cogs}/{term_abbrev}
+  At {target_price}: gross margin = ${target - cogs}/{term_abbrev} — **margin-positive** ✅
+  At renewal ({renewal_price}): gross margin = ${renewal - cogs}/{term_abbrev}
+
+  {If COGS not provided:}
+  [Analyst to confirm COGS under current contract. Verify margin-positive at {target_price} before submitting.]
+
+  ---
+
+  ## Financial Impact
+
+  {If iGCR data provided:}
+  {paste financial impact table from AGIGROWTH ticket or analyst}
+
+  {If not provided:}
+  [Analyst to complete — insert iGCR/GCR projection from {AGIGROWTH-XXX} or sizing document]
+
+  ---
+
+  ## Blast Radius — PFID × ITC Inventory
+
+  {one line per distinct PFID × ITC pairing}
+  - PFID {pfid} ({product_name}, {term}) on {itc}: offer type {NES/CES}, current code "{code or "none"}", {N} orders/30d
+
+  **Existing codes to replace:** {codes or "None"}
+
+  ---
+
+  ## Notes / Flags for Pricing Team
   {one line per row in the Flags table — omit section if no flags}
   - {flag}: {detail}
 
-  **Requested change:** [analyst to complete]
+  ---
+
+  ## Related
+  {If AGIGROWTH:} * **{AGIGROWTH-XXX}**: {ticket summary}
+  {If gate dependency:} * ⚠️ Gate: must launch **{OTHER-TICKET}** before this code goes live
+  {If prior PRICING reference:} * Prior reference: **{PRICING-XXXXX}**
+
+  ---
 
   Acceptance criteria:
-  - [ ] Discount code applied to all PFID × ITC combinations listed above
-  - [ ] NES package ID discount configuration confirmed with ecomm
-  - [ ] CES slug candidates confirmed with merchandising team before applying code
+  - [ ] Discount code applied to all PFID × ITC combinations listed in Blast Radius
+  - [ ] Promotional price and discount amount confirmed with requesting team
+  - [ ] Renewal price confirmed (standard list vs. price-lock)
+  - [ ] COGS/margin verified — confirm margin-positive at promotional price
+  - [ ] NES package ID discount configuration confirmed with ecomm (if NES)
+  - [ ] CES slug candidates confirmed with merchandising team (if CES)
   - [ ] Blast radius verified — no unintended surfaces included
-  {if Flags table included "Blast radius exceeds ticket scope":}
+  {if UPP:}
+  - [ ] Hivemind experiment config created with UPPDCX suffix and UPLIB label
+  {if Flags included "Blast radius exceeds ticket scope":}
   - [ ] Out-of-scope ITCs reviewed and confirmed excluded
 ```
 

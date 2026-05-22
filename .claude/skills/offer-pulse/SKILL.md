@@ -827,6 +827,56 @@ Do not emit a "no results" or "zero billing rows" error when the pre-launch chec
 
 \---
 
+### Surface Context Check (Tribal Knowledge)
+
+*Fires after all Route Lock and path-disclosure blocks, before any catalog or merchandising chain steps begin. Applies on both NES and CES paths.*
+
+**Purpose:** Surface any tribal knowledge entries containing verified facts, quirks, or warnings specifically about this surface or the products being queried. TK entries document things that are permanently true and not derivable from data alone — product mix facts, migration ceilings, wrong assumptions to avoid, ghost ID behavior.
+
+**Step 1 — Read the log:**
+
+Read `.claude/skills/tribal-knowledge/knowledge-log.md`.
+
+**Step 2 — Score each active entry against two match targets:**
+
+1. **ITC tag match:** the Tags field contains a substring that matches the target ITC string (e.g. `dpp_precheck` in Tags → qualifies for a `dpp_precheck` run)
+2. **Product tag match:** the Tags field contains a product alias or family name that matches the product being queried in this run (e.g. `m365`, `mhwp`, `domain-protection`, `wam`)
+
+An entry qualifies if it scores at least one match on either target.
+
+**Eligibility filters — all must pass:**
+
+- `Status : active` only. Never surface archived entries.
+- Category must be one of: `Domain Fact` | `Data Quirk` | `System Behavior` | `Naming Convention`
+  - `Historical Context`: eligible only if it scores an ITC tag match (no credit for product-only match)
+  - `Terminology`: never surface here — reference material, not run-time warnings
+- The body must contain information that could change what the analyst does with this output. If the body is purely "how this was discovered" with no current-behavior implication, exclude it.
+
+**Step 3 — Emit the block:**
+
+Only emit if ≥1 entry qualifies. If zero qualify, omit this block entirely — no "no entries found" message.
+
+```
+SURFACE CONTEXT — Tribal Knowledge
+{N} active entr{y/ies} relevant to {ITC}:
+
+TK-{NNN} ({Category}) — {Title}
+  {First 2–3 sentences of body, trimmed to ~200 chars}
+  → Full entry: /tribal-knowledge {NNN}
+```
+
+Separate each entry with a blank line. Cap at 5 entries. If more than 5 qualify, prioritize ITC tag matches over product-only matches.
+
+**Inline disclosure rule (applies beyond this step):**
+
+Whenever a fact from a surfaced TK entry directly influences a downstream decision in this run — a routing flag, a product assumption, a migration warning, a PFID recommendation — cite the TK ID at that point in the output:
+
+> `Per TK-{NNN}: {one-sentence restatement of the relevant fact.}`
+
+This ensures the analyst can always trace the source of any non-obvious statement in the output back to a recorded, citable entry.
+
+\---
+
 ### Step A2a — NES Path (Catalog Lookup)
 
 *Runs when NES coverage > 0%.*
@@ -1780,6 +1830,7 @@ BPO / Trial                 :  {value from get\_curated\_offer response — omit
 Cart Renewal Behavior       :  {value from get\_curated\_offer response — omit line if not present in response}
 Geo Scope                   :  {markets from request}
 Discount                    :  {item\_discount\_code} from billing. UUID placeholder → "None (UUID placeholder)". Real code → write verbatim. Omit only if item\_discount\_code is null for every row for this bundle on this surface.
+Discount (catalog)          :  {discountCodes\[] from get\_curated\_offer response — comma-separated if multiple codes present. Omit this line entirely if discountCodes is absent or an empty array in the response.}
 Discount (from ticket)      :  {discount code extracted from Jira ticket body or linked PRICING ticket — omit line if entry was not a Jira ticket or no code was stated; if a PRICING ticket was referenced, note it: "{code} (see {PRICING-XXXXX})"}
 Customer Segment            :  New / existing / both
 Offer Lever                 :  {value from Jira Classification field, analyst entry, or "Not specified"}
@@ -1844,7 +1895,8 @@ Source to Clone             :  {base\_slug} (base — use this as the clone sour
 * **Term:** always populated. If a specific term was requested, write exactly that value (e.g. "1 Year"). If all terms were requested or no filter was applied, list every distinct `product\_term\_num` + `product\_term\_unit\_desc` combination observed for this bundle on this surface (e.g. "1 Year, 2 Year, 3 Year"). When multiple terms appear and no filter was applied, add a note: "All terms shown — confirm scope with analyst before filing." Do not aggregate or hide any observed term.
 * **BPO / Trial:** sourced from the `get\_curated\_offer` response. Omit this line entirely if the field is absent in the response — do not write "N/A" or "None".
 * **Cart Renewal Behavior:** sourced from the `get\_curated\_offer` response. Same rule — omit if not present.
-* **Discount:** always reflects billing data, not what the request says. See format rules above. When entry was a Jira ticket and a `Discount (from ticket)` was extracted (e.g. "DISCWAMBA", "365AF1F1CB from PRICING-15500"), add a second `Discount (from ticket)` line immediately after the billing-derived `Discount` line. If a PRICING ticket was referenced in the Jira body, note it: `Discount (from ticket) : {code} (see {PRICING-XXXXX})`. These two Discount lines are separate — billing shows what exists today; ticket shows what is being applied by this experiment.
+* **Discount:** always reflects billing data, not what the request says. See format rules above. When entry was a Jira ticket and a `Discount (from ticket)` was extracted (e.g. "DISCWAMBA", "365AF1F1CB from PRICING-15500"), add a second `Discount (from ticket)` line immediately after the `Discount (catalog)` line. If a PRICING ticket was referenced in the Jira body, note it: `Discount (from ticket) : {code} (see {PRICING-XXXXX})`. These three Discount lines are separate — billing shows what exists today; catalog shows what is embedded in the curated offer definition; ticket shows what is being applied by this experiment.
+* **Discount (catalog):** sourced from `discountCodes[]` on the `get_curated_offer` response. This field is present on NES path when `get_curated_offer` is called (Steps A2a and A2c Chain Steps 1–2). On the CES path, it is available when the champion was resolved via `get_curated_offer` (Chain Step 1 or 2 success); it is unavailable when Chain Step 3 (tag search only) ran without a `get_curated_offer` call. Omit this line entirely if `discountCodes` is absent or an empty array — do not write "None". Write comma-separated codes verbatim if multiple codes are present. This is distinct from billing-derived `Discount` and ticket-supplied `Discount (from ticket)`.
 * One Component line per entry in `prePurchaseKeyMap.offers\[]`. Use the component's `name` from `get\_offer\_definition\_by\_id` as the label. Never omit a component. **Exception: Modify — Add Component requests.** When Offer Operation = Modify, do not list existing unchanged components in any output block or ticket preview. The "never omit a component" rule applies to Create/Clone paths only. The Modify output shows only what is being added.
 * For Standalone Offers: label the ID field `Offer ID` (not `Offer Collection ID`). Emit the `Plan` line immediately after, using the plan from `get\_offer\_collection\_definition` — it is authoritative for standalones. Omit all Component lines. Always emit `Offer Collection ID : Not available` — the field must appear so the analyst can confirm it was looked for and not found.
 * For Offer Collections: label the ID field `Offer Collection ID`. Emit a `Collection Plan` line immediately after it using the top-level `plan` from `get\_curated\_offer` — this is the collection-level plan engineers use for cloning operations. Do not omit this line. Do not emit a standalone `Plan` line — that label is reserved for Standalone geometry. Emit one Component line per `prePurchaseKeyMap.offers\[]` entry.
@@ -2167,9 +2219,15 @@ Wait for confirmation before running A1. Do not silently proceed with the origin
 
 After all output is rendered (Quick Reference blocks, Flags, CES Terminal Payload — whichever apply), always append this prompt as the final line of your response:
 
-> "Would you like to see a draft of what the \*\*ecomm engineering ticket request\*\* would look like? I'll format it for copy-paste — no ticket will be created."
+> "Would you like to see a draft of what the **ecomm engineering ticket request** would look like? I'll format it for copy-paste — no ticket will be created."
+>
+> "Would you also like me to run **/pricing-ticket** to draft the **PRICING ticket** for this surface? I'll use the champion, PFIDs, and discount codes already resolved above — no ticket will be created."
 
-Wait for the analyst's response. If they say yes (any affirmative — "yes", "sure", "show me", "go ahead"), render the appropriate Ticket Preview block below. If they say no or ignore it, do not render the preview.
+Ask both questions together in a single prompt. Wait for the analyst's response. Handle each independently — analyst may want one, both, or neither.
+
+- Ecomm ticket yes → render the appropriate Ticket Preview block below.
+- Pricing ticket yes → invoke `/pricing-ticket` with the already-resolved context: surface/ITC, PFID list, champion package_id (if NES), and current discount code from `discountCodes[]` (NES) or `item_discount_code` (CES). This skips B0 and the PFID discovery gate in pricing-ticket.
+- If they say no or ignore either, do not render that preview.
 
 **HARD CONSTRAINT — READ ONLY:** The skill must never call `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue`, or any write-capable Atlassian tool as part of the ticket preview. This step is display-only. The analyst copies and files the ticket themselves. Violation of this constraint is a critical error.
 
@@ -2390,7 +2448,7 @@ This preview targets the **CES/Merchandising team** (not ecomm engineering) — 
     Offer Collection ID: {offerId from get\_curated\_offer — or "Not resolved — confirm before filing" if confidence is None}
     Components: {N component offer IDs — listed in Quick Reference above}
     {Both geometry types:}
-    Catalog discount code: {discountCode field from get\_curated\_offer — or "None" if field absent, or "Not resolved — confirm before filing" if confidence is None}
+    Catalog discount code: {discountCodes\[] from get\_curated\_offer — comma-separated if multiple; omit this line entirely if discountCodes is absent or empty; write "Not resolved — confirm before filing" if confidence is None and get\_curated\_offer was not called}
 
   \*\*PFIDs to include:\*\*
   {one row per PFID × Term from the CES Terminal Payload table}

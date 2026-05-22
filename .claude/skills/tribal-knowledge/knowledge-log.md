@@ -1151,3 +1151,92 @@ Archive note : —
 Archived     : —
 
 ---
+
+## TK-047
+Title      : dpp_precheck product mix is domain protection + email — NOT WAM or MHWP
+Status     : active
+Category   : Domain Fact
+Tags       : dpp_precheck, precheck, product-mix, domain-protection, m365, email, mhwp,
+             wam, ces, migration
+Added      : 2026-05-22
+Source     : CLN add_to_cart_product_event_cln query 2026-05-22; offer_pulse_experiment
+             precheck ITC breakdown
+Related    : TK-017, TK-025
+
+dpp_precheck is a domain checkout upsell surface — it fires add-to-cart CLN events but
+has 0 package_ids on every product (confirmed CES, not a cart bypass issue). Top products
+by CLN event volume (7-day window as of 2026-05-22):
+
+  Full Domain Protection (all market variants)   ~55K events
+  Microsoft 365 Email Essentials                 ~14K events
+  Professional Email Pro Light                    ~4K events
+  M365 Email Essentials with Security             ~1.5K events
+  Online Essentials                               ~1.4K events
+  Domain Ownership Protection                      ~350 events
+  .COM / .ME / .IN domain registrations           small volume
+
+Two common assumptions that are WRONG:
+1. MHWP (Managed Hosting for WordPress) is on precheck — FALSE. Zero CLN events for
+   any managed wordpress product on precheck. MHWP is not sold through this surface.
+2. WAM website builder products dominate precheck — FALSE. WAM is not significant
+   precheck volume. "Online Essentials" (~1.4K) may be WAM-adjacent but it is negligible.
+
+Migration roadmap implications:
+- Full Domain Protection: no NES migration date as of 2026-05-22
+- M365 Email: target 6/30/2026 (E2E testing active); NES offer = office365-tier0
+- Professional Email: no migration date
+- WAM (if any): Q3 2026 TBD
+
+When the CES migration story is told ("precheck will gain package_ids once WAM/email
+migrates"), the accurate framing is: domain protection + email products, with domain
+protection as the #1 volume driver. Domain protection has no confirmed migration date
+and represents the majority of precheck volume — the migration unlocks email first,
+not domain protection.
+
+Archive note : —
+Archived     : —
+
+---
+
+## TK-048
+Title      : Remaining CES migration has low ceiling for offer pulse coverage improvement
+Status     : active
+Category   : Domain Fact
+Tags       : offer-pulse, ces, migration, coverage, dpp_precheck, domain-protection,
+             cart-bypass, upp, dpp, null-itc
+Added      : 2026-05-22
+Source     : offer_pulse_experiment + CLN precheck investigation 2026-05-22
+Related    : TK-047, TK-001
+
+The narrative "once WAM and email on precheck migrate, offer pulse will have more coverage"
+overstates the impact. CLN-confirmed analysis shows the ceiling is low:
+
+WHAT MIGRATION FIXES (precheck specifically):
+- M365 Email Essentials (~14K events/week) gains package_id after 6/30/2026
+- Professional Email Pro Light (~4K/week): no migration date — stays CES
+
+WHAT MIGRATION DOES NOT FIX:
+- Full Domain Protection (~55K events/week on precheck, ~73% of precheck volume):
+  no NES migration date as of 2026-05-22. This is the dominant precheck product.
+- DPP non-precheck (dpp_config1: ~72K orders/7d, 100% CES): not on any migration roadmap
+- UPP surfaces (~97K orders/7d, 100% CES): not on any migration roadmap
+- Cart bypass: ~46% of purchases skip the add-to-cart event entirely — structural gap,
+  CES→NES migration cannot fix this
+- Null ITC bucket: eComm API was never passed an ITC at purchase time — not a CES/NES issue
+
+COVERAGE CEILING ON PRECHECK:
+Even after the 6/30/2026 M365 email migration, ~80%+ of precheck add-to-cart volume
+remains CES (domain protection + professional email + minor products). The FOS category
+missing rate in offer_pulse_experiment will improve only marginally.
+
+BOTTOM LINE FOR OFFER PULSE:
+The remaining CES migration is a data quality win for specific products (M365 email on
+precheck). It is not a meaningful coverage inflection point for offer pulse overall.
+The dominant precheck product — Full Domain Protection — has no migration date. The
+precheck gap in offer pulse is a domain protection coverage problem, not an email/WAM
+problem.
+
+Archive note : —
+Archived     : —
+
+---
