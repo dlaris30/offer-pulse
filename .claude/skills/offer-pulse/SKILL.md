@@ -233,7 +233,25 @@ Question: "Should this cover **new customers**, **existing / renewal customers**
 
 ### Dimension 3 — Target Markets / Geo Scope
 
-**Skip if:** specific markets or regions are named (e.g. "ROW and India", "US only", "all markets", "globally").
+**Skip if:** the entry names a market that is already fully specific and requires no further clarification — specifically `US only`, `US`, `United States`, or a single named country code or country name. When the entry is US-only, skip the gate question entirely.
+
+**Market vagueness check (runs before the Market inference layer — fires when input names a group label but not constituent countries):**
+
+The following group labels are **not** sufficient to resolve Dimension 3 on their own. When the analyst supplies one of these labels and the entry contains no additional country specificity, ask the appropriate clarifying sub-question:
+
+| Vague input label | Why it is insufficient | Required clarification question |
+|---|---|---|
+| `DEM` / "DEM markets" | DEM = CA + AU + GB (three countries). Each may require separate catalog calls and UK (GB) bundles use structurally distinct offer collections (`officeBusinessP1` / `emailEssentialsEe` variants). The subset in scope must be confirmed. | "DEM covers CA, AU, and GB. Are all three in scope for this ticket, or a subset? Also — does this ticket require UK-specific offer variants (GB uses different bundle IDs than CA/AU)?" |
+| `Global` / "all markets" / "globally" | No country filter can be applied and UK variants, M365 geo-availability, and India-inclusion all remain unknown. | "When you say global / all markets — should I include every country with no geo filter, or are specific regions in scope? If a subset, please list them (e.g. US + DEM + India)." |
+| `ROW` / "Rest of World" | ROW has two definitions in use: (a) `NOT IN ('US','CA','AU','GB','IN')` (standard — excludes India) and (b) `NOT IN ('US','CA','AU','GB')` (ROW+IN — includes India). The distinction is architecturally significant: if India is in scope, M365 components are blocked and a Titan Email substitute is required. | "Does ROW include India (IN)? The billing filter and M365 component eligibility differ depending on your answer." |
+
+**Firing conditions:**
+- If the entry (or `customfield_20800` from a Jira ticket) contains only a vague group label with no additional country specificity, the vagueness check fires and the appropriate question above must be asked.
+- If the entry already answers the sub-question (e.g. "ROW and India" explicitly includes India, "ROW excluding India" explicitly excludes it, "DEM — all three" explicitly confirms all three), the vagueness check does not fire and the label is treated as resolved.
+- US-only scope always bypasses this check — no clarification is needed when the US is clearly the sole target.
+- This check counts toward the max-4-questions gate. If market clarification is required but asking it would exceed 4 questions, drop the Offer Lever question first (per the priority order in the gate header) to preserve this slot.
+
+Once the analyst answers the vagueness sub-question, the resolved value replaces the original group label everywhere downstream (billing filter, catalog `marketId`, M365 geo risk assessment).
 
 **Market inference layer (run before asking — attempt in this order):**
 
@@ -265,18 +283,21 @@ If present and non-null, use it directly as the market/geo scope. This field ove
 * cPanel hosting, Business Hosting on `slp\_\*` or `dlp\_\*` surfaces without an intl variant → US domestic is a safe default
 * WAM/WSB, Email (M365/Titan), domain products → do NOT infer from product alone; these have geo-split champion families
 
-**Inference resolution rule:** If exactly one market is unambiguously supported by the inference sources above, skip the question and document the result as `Market (inferred): {value}` in the gate resolution summary. If inference is ambiguous or produces no result, market must be asked — it is a required input and cannot be assumed.
+**Inference resolution rule:** If exactly one market is unambiguously supported by the inference sources above, skip the question and document the result as `Market (inferred): {value}` in the gate resolution summary. If the inference sources return a vague group label (DEM, ROW, Global), do not treat it as resolved — apply the market vagueness check above before proceeding. If inference is ambiguous or produces no result, market must be asked — it is a required input and cannot be assumed.
 
 **Why market is especially load-bearing for Path A:** Market is required for the `catalog\_query\_get\_offers` call in CES Chain Step 3 (`marketId` and `currency` parameters). It also determines the billing country filter applied in Step A1 and whether the M365 geo-availability flag fires in Step A2a. Without a market, Step A1 produces a miscounted PFID list, Chain Step 3 cannot run, and M365 risk cannot be assessed.
 
 **Market → query filter mapping:**
 
 * "US only" → `AND ope.bill\_country\_code = 'US' AND ope.trxn\_currency\_code = 'USD'`
-* "ROW" (Rest of World) → `AND ope.bill\_country\_code NOT IN ('US', 'CA', 'IN')` — confirm the ROW definition with the analyst if the ticket specifies a non-standard boundary
+* "ROW (excluding India)" → `AND ope.bill\_country\_code NOT IN ('US', 'CA', 'AU', 'GB', 'IN')` — standard ROW definition
+* "ROW + India" / "ROW including India" → `AND ope.bill\_country\_code NOT IN ('US', 'CA', 'AU', 'GB')` — India included; M365 component is BLOCKED for IN-market rows (see M365 Geo Risk Handling)
+* "DEM" (all three) → `AND ope.bill\_country\_code IN ('CA', 'AU', 'GB')`. Run a single query covering all three; group by `bill\_country\_code` to show per-country volume. For catalog calls, UK (GB) requires a separate `get\_curated\_offer` pass with `catalogInstanceConfig` / GB-specific offer collections — run in parallel with CA/AU.
+* "DEM — subset" (e.g. CA + AU only) → apply `IN ('{iso1}', '{iso2}')` for the confirmed subset. Do not include GB unless the analyst confirmed it.
 * "India" → `AND ope.bill\_country\_code = 'IN'`
 * Named country → `AND ope.bill\_country\_code = '{iso\_code}'`
-* "All markets" or "globally" → omit country filter; add `ope.bill\_country\_code` and `ope.trxn\_currency\_code` to the GROUP BY and display them as columns
-* CES Chain Step 3: translate market to `marketId` (ISO country code, e.g. `US`, `IN`) and `currency` (ISO currency code, e.g. `USD`, `INR`)
+* "All markets" or "globally" (confirmed, no filter) → omit country filter; add `ope.bill\_country\_code` and `ope.trxn\_currency\_code` to the GROUP BY and display them as columns
+* CES Chain Step 3: translate market to `marketId` (ISO country code, e.g. `US`, `IN`) and `currency` (ISO currency code, e.g. `USD`, `INR`). For multi-country scope (DEM or confirmed all-markets), run one Chain Step 3 call per distinct country — do not pass a group label as `marketId`.
 
 Question: "Which markets should this cover? (e.g. US only, ROW, India, all markets, or a specific country list)"
 
@@ -531,6 +552,8 @@ If the vocab file returns multiple matches, show them to the analyst and ask whi
 
 If zero matches: note `Surface not found in vocabulary — run /surface-vocab explore or provide an exact ITC` and ask the analyst to clarify before proceeding.
 
+For known domain facts, surface quirks, and naming conventions not captured in the surface vocab, check `/tribal-knowledge`.
+
 Bulk table matches are low-confidence — if the ITC is resolved from the bulk table, add `(surface label confidence: low — run /surface-vocab explore to promote to full profile)` to the output.
 
 **Surface vocab enrichment (runs after any ITC is resolved — from the map above, vocab fallback, or direct analyst input):**
@@ -736,6 +759,8 @@ Examples:
 
 This label must carry through all remaining steps and appear as the `Offer Route` field in every Quick Reference block. Do not switch routes mid-execution without a new disclosure line explaining why (e.g. pre-launch NES check changed the outcome).
 
+**Migration status advisory (soft hint):** NES/CES routing is based on live billing data (last 7 days). If NES coverage = 0% but the surface vocabulary lists the surface as `CES (NES in progress)`, migration may be in progress but incomplete in the data window. Run `/migration-check` to confirm the current live NES% before treating the surface as CES-only.
+
 **Vocab advisory (soft hint — fires only when NES coverage = 0% AND surface\_nes\_ces resolved):**
 
 If `surface\_nes\_ces` resolved to `NES` or `Mixed`, emit this single line before the pre-launch NES check:
@@ -834,32 +859,9 @@ Before calling `get\_curated\_offer` on any `package\_id` value from Step A2, cl
 
 \---
 
-### Step A2a-PC — Package Catalog Pre-Check
-
-*Runs after the Pre-classification filter in Step A2a, before any `get\_curated\_offer` call. Applies only to slugs that survived the filter (not CES term-aliases, not ghost IDs).*
-
-Read `.claude/skills/package-catalog/catalog.md`. For each surviving `package\_id`, look up the slug in the `package\_id` column. Apply the branch below based on the result.
-
-**Lookup branches:**
-
-|Condition|Action|
-|-|-|
-|`geometry = standalone`|Geometry pre-confirmed. Proceed to `get\_curated\_offer` to retrieve the Offer ID and Plan. No geometry re-derivation needed from the catalog response — trust the catalog column.|
-|`geometry = bundle`|Geometry pre-confirmed as Offer Collection. Proceed to `get\_curated\_offer` to retrieve component UUIDs via `prePurchaseKeyMap`. Note: if the catalog response contains `offerIds\[]` instead of `prePurchaseKeyMap` / `offersGrouping`, component resolution is not possible (apiVersion 3 pattern) — flag as `Bundle — components not resolvable (V3)` and halt component lookup for this slug.|
-|`geometry = unknown` AND `catalog\_verified` value contains `NOT\_FOUND`|This slug was not found in the test catalog. It may exist in production only. Proceed with `get\_curated\_offer` regardless — never skip the live call for `unknown` entries. No special output flag is required unless the call also returns NOT\_FOUND.|
-|Slug is not present in catalog.md|New or unclassified slug. Proceed with `get\_curated\_offer` as normal. After the run completes successfully, emit this note at the end of output: `Geometry catalog note: {package\_id} was not found in /package-catalog. Consider running \\`/package-catalog refresh` to classify it.`|
-
-**Refresh prompt suppression rule:** Never emit the "Consider running `/package-catalog refresh`" note for slugs whose `package\_id` ends with `\_\\d+mo` (underscore + digits + "mo"). These are CES term-alias slugs — they route through the CES path and the package-catalog is not applicable.
-
-**CES path note:** The CES path (Step A2b onward) does not use `package\_id` values from billing. If a non-null `package\_id` surfaces on a surface routed to CES, look it up in catalog.md before concluding it is a misrouted NES offer. If catalog.md shows a geometry entry for that slug, flag it as `Possible NES offer on CES surface — verify routing` and surface it to the analyst before continuing the CES chain.
-
-**`free\_trial` flag:** If catalog.md shows `free\_trial = true` for any slug, add `Free Trial` to the Flags table for that package\_id. This supplements but does not replace the BPO / Cart Renewal Behavior fields check in the catalog response.
-
-\---
-
 ### Step A2a-SF — NES Slug Family Expansion
 
-*Runs after Step A2a-PC (Package Catalog Pre-Check) and the Free trial detection pre-check, before the `get\_curated\_offer` calls. Applies only to the NES path (NES coverage > 0%, or GAP-042 trigger — see below). Does NOT run on the CES path.*
+*Runs after the Pre-classification filter in Step A2a and the Free trial detection pre-check, before the `get\_curated\_offer` calls. Applies only to the NES path (NES coverage > 0%, or GAP-042 trigger — see below). Does NOT run on the CES path.*
 
 **Purpose:** Billing-confirmed champions (from `pf\_id\_package\_details\_v1`) are keyed on the exact PFID queried. Sibling bundles in the same product family — same base offer, same slug prefix, but serving a different term-length PFID — are invisible to the pre-flight unless they happen to share a PFID with the entry product. This step scans the full active catalog for the complete slug family and presents all variants to the analyst so the correct clone source can be selected based on desired component configuration, not just what appeared in billing.
 
@@ -1188,6 +1190,8 @@ Returns a JSON array. Key fields per object:
 * `productPackage.addons\[]` — optional add-on groups (elective, not wired at checkout)
 
 Truncation is expected: the `/v1/packages` endpoint returns 200+ packages and WebFetch will routinely truncate the response. Truncation is not an error. The unverified truncated portion cannot be confirmed, but this is acceptable — the merchandising API PFID match (direct catalog tool calls) is the authoritative source for package composition. WebFetch is a secondary check only.
+
+**CES Package catalog shortcut:** `/ces-packages` has pre-scanned ~105 high-volume CES packages and maps each slug to its constituent PFIDs and domain/email options. When the merchandising API returns truncated or ambiguous results for a known domain, hosting, or WAM/WSB surface, check `/ces-packages` for pre-mapped PFID data before proceeding to the chain steps.
 
 **On a summary-style response** ("no matches found", "I searched the packages", "none of the packages contain"): treat as ambiguous — NOT a confirmed no-match. WebFetch may have summarized rather than parsed the JSON. Proceed immediately to Chain Step 2 and record in the chain narrative: "Merchandising API result was ambiguous — WebFetch may have summarized the response. Chain Step 2 run as primary. No-match cannot be confirmed from WebFetch alone."
 
@@ -1873,8 +1877,10 @@ When the M365 geo risk flag fires, apply the decision table below before renderi
 
 |Stated target market|Action|Output effect|
 |-|-|-|
-|Explicitly includes India|BLOCK|Add `BLOCKING: M365 component cannot be shown in India — bundle requires an alternative email component (Titan Email / open exchange) before this ticket can be filed.` Replace the M365 component row in the payload with `\[BLOCKED — geo-restricted component]`.|
-|"Global", "all markets", "ROW", or unspecified|WARN|Add `GEO WARNING: Target market includes or may include India and developing markets where M365 is unavailable. Confirm geo scope with ecomm before filing. If India is in scope, substitute Titan Email (offer ID: 927a9d45).`|
+|Explicitly includes India (resolved "ROW + India", named "IN", or "globally" confirmed to include IN)|BLOCK|Add `BLOCKING: M365 component cannot be shown in India — bundle requires an alternative email component (Titan Email / open exchange) before this ticket can be filed.` Replace the M365 component row in the payload with `\[BLOCKED — geo-restricted component]`.|
+|"ROW (excluding India)" — resolved, India confirmed out of scope|No action for India|Flag row still appears in the Flags table. No BLOCKING for India. If market scope includes other developing markets where M365 may be unavailable, add a narrower WARN noting those markets specifically.|
+|"Global" or "all markets" — resolved, no country filter|WARN|Add `GEO WARNING: Target market covers all countries, including India and developing markets where M365 is unavailable. If India is in scope, substitute Titan Email (offer ID: 927a9d45).`|
+|Vague group label still unresolved (DEM, ROW, Global without sub-question answered)|BLOCK gate|Do not proceed to M365 risk assessment. The vagueness check in Dimension 3 must be answered first — India-inclusion cannot be determined from the group label alone.|
 |Explicitly US / CA / AU / GB / developed-market-only|No action|Flag row still appears in the Flags table (for record) but no BLOCKING or WARN line is added to the payload.|
 
 **Confirmed restricted markets (from billing data):** India (`IN`). Zero `IN`-market rows observed in billing for `wordpress-o365-forever-ssl-basic`, `wordpress-o365-forever-ssl-deluxe`, `dpp-ca-ca-solution-tier1`, or any `-o365-` slug. Treat any IN-market scope as a hard block.
