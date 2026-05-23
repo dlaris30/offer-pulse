@@ -90,7 +90,7 @@ Output the reference card below verbatim. Do not read any other files.
 Agent: general-purpose
   Open-ended research, multi-step investigation, codebase search
   when target is uncertain. Catch-all for complex delegated tasks.
-  ← used by: /overnight, /use-cases, /batch-test
+  ← used by: /refresh, /use-cases, /batch-test
 
 Agent: Explore
   Fast read-only codebase search. Use for file-pattern lookups,

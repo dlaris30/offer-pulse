@@ -353,7 +353,7 @@ When you encounter a NOT FOUND: (1) if `nes-` prefix, strip and retry before cla
 
 ## Pipeline Review Mode
 
-When invoked by an automated skill (e.g., `/overnight` Step 3a) to review a proposed fix, output a structured verdict as the **first line**:
+When invoked by an orchestrating skill (e.g., `/refresh` Phase 1d) to review a proposed fix, output a structured verdict as the **first line**:
 
 - **APPROVED** — the proposed fix is architecturally sound. Include relevant context, constraints to respect, and known gotchas below the verdict.
 - **BLOCKED** — the proposed fix has a hard structural incompatibility that would cause it to fail or produce incorrect output. List each blocker precisely.
