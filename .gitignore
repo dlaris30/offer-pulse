@@ -27,6 +27,7 @@ Reference Docs/
 .claude/skills/pricing-xml/
 .claude/skills/pricing-xml-checker/
 .claude/skills/wbr/
+.claude/skills/refresh/
 
 # Node dependencies
 node_modules/
