@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-16"?>
+<!-- PRICING-15500 | M365 Online Essentials w/o Teams $3.99/mo | USD only | 1 PFID | $3.99 x 12 = $47.88 -->
+<ProductPromo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StartDate>2026-04-06T00:00:00</StartDate>
+  <ExpirationDate>2027-06-01T00:00:00</ExpirationDate>
+  <Active>1</Active><IsActive>true</IsActive>
+  <CreatedDate>0001-01-01T00:00:00</CreatedDate>
+  <UseLimit xsi:nil="true" />
+  <PromoCode>365AF1F1CB</PromoCode>
+  <IsPhoneValidationEnabled>false</IsPhoneValidationEnabled>
+  <Name>New Discount Code – M365 Online Essentials w/o Teams @ $3.99/mo</Name>
+  <Description>New Discount Code – M365 Online Essentials w/o Teams @ $3.99/mo</Description>
+  <Type>DiscountCode</Type>
+  <CampaignTypeID>1</CampaignTypeID>
+  <NumberOfCurrencies>0</NumberOfCurrencies>
+  <RankValue>10</RankValue><Rank>10</Rank>
+  <NumberOfUses xsi:nil="true" />
+  <PromoExclusion>0</PromoExclusion>
+  <Conditions />
+  <Awards>
+    <ProductAwardV2><AwardId>1</AwardId><AwardAmountType>Unlimited</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity xsi:nil="true" /><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1768604</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>47.88</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+  </Awards>
+  <AwardAppliesTo>HighestPriceFirstMayOverlapConditions</AwardAppliesTo>
+  <PrivateLabels><PrivateLabelV2><PrivateLabelID>1</PrivateLabelID><IsActive>true</IsActive><StartDate>0001-01-01T00:00:00</StartDate><EndDate>0001-01-01T00:00:00</EndDate><New>false</New><Remove>false</Remove></PrivateLabelV2></PrivateLabels>
+  <ShopperIdRestrictions /><Restriction>NoRestriction</Restriction>
+  <Version>1</Version>
+  <UsageType>NotShopperRestricted</UsageType>
+  <DeprecatedMatchedAwardPromo>false</DeprecatedMatchedAwardPromo>
+  <UnsupportedConditionsOrAwards>false</UnsupportedConditionsOrAwards>
+</ProductPromo>

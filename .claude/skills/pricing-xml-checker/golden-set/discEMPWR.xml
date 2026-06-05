@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProductPromo xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StartDate>2026-03-18T00:00:00</StartDate>
+  <ExpirationDate>2027-01-01T00:00:00</ExpirationDate>
+  <Active>1</Active><IsActive>true</IsActive>
+  <CreatedDate>0001-01-01T00:00:00</CreatedDate>
+  <UseLimit>50000</UseLimit>
+  <PromoCode>discEMPWR</PromoCode>
+  <IsPhoneValidationEnabled>false</IsPhoneValidationEnabled>
+  <Name>PRICING-15371 GoDaddy Empower Student Distribution 2026</Name>
+  <Description>PRICING-15371 GoDaddy Empower Student Distribution 2026</Description>
+  <Type>DiscountCode</Type>
+  <CampaignTypeID>1</CampaignTypeID>
+  <NumberOfCurrencies>0</NumberOfCurrencies>
+  <RankValue>10</RankValue><Rank>10</Rank>
+  <NumberOfUses>2</NumberOfUses>
+  <PromoExclusion>0</PromoExclusion>
+  <Conditions />
+  <Awards>
+    <ProductAwardV2>
+      <AwardId>2</AwardId>
+      <AwardAmountType>Units</AwardAmountType>
+      <AwardType>PercentOff</AwardType>
+      <AwardQuantity>1</AwardQuantity>
+      <PercentOff>100</PercentOff>
+      <SuppressIcannFees>true</SuppressIcannFees>
+      <PfIds><int>102</int></PfIds>
+    </ProductAwardV2>
+    <ProductAwardV2>
+      <AwardId>1</AwardId>
+      <AwardAmountType>Units</AwardAmountType>
+      <AwardType>PercentOff</AwardType>
+      <AwardQuantity>1</AwardQuantity>
+      <PercentOff>100</PercentOff>
+      <SuppressIcannFees>false</SuppressIcannFees>
+      <PfIds>
+        <int>1017145</int>
+        <int>1022607</int>
+        <int>1171188</int>
+        <int>1307354</int>
+        <int>1555167</int>
+        <int>970475</int>
+      </PfIds>
+    </ProductAwardV2>
+  </Awards>
+  <AwardAppliesTo>HighestPriceFirstMayOverlapConditions</AwardAppliesTo>
+  <PrivateLabels>
+    <PrivateLabelV2>
+      <PrivateLabelID>1</PrivateLabelID>
+      <IsActive>true</IsActive>
+      <StartDate>0001-01-01T00:00:00</StartDate>
+      <EndDate>0001-01-01T00:00:00</EndDate>
+      <New>false</New>
+      <Remove>false</Remove>
+    </PrivateLabelV2>
+  </PrivateLabels>
+  <ShopperIdRestrictions />
+  <Restriction>Restricted</Restriction>
+  <Version>8</Version>
+  <UsageType>NotShopperRestricted</UsageType>
+  <DeprecatedMatchedAwardPromo>false</DeprecatedMatchedAwardPromo>
+  <UnsupportedConditionsOrAwards>false</UnsupportedConditionsOrAwards>
+</ProductPromo>

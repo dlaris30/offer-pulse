@@ -33,6 +33,11 @@ Output the reference card below verbatim. Do not read any other files.
   Full surface audit → EP engineering ticket payload (curated offer
   creation). NES and CES paths. Primary workflow skill.
 
+/live-surface <ITC> [tier]
+  Scrape the live test page for an ITC → returns all active NES
+  curated offer IDs with catalog detail. Fast path for FOS surfaces.
+  Called automatically by /offer-pulse for slp_* and dlp_* surfaces.
+
 /surface-profile <ITC|alias>
   2-query lightweight scout before a full audit. Returns NES/CES
   split, top packages, top PFIDs, and last-audited date. Use first

@@ -1,0 +1,120 @@
+{
+  "corpus_size": 14,
+  "derived_at": "2026-06-03",
+  "corpus_files": [
+    "365AF1F1CB",
+    "DISC15200",
+    "DISC15278",
+    "DISC214228",
+    "DISCMWPB5",
+    "DISCWAMBA",
+    "DISCWHECON",
+    "NoAMTxFee1",
+    "disc15265",
+    "disc15348",
+    "disc852258",
+    "discOPNCLW",
+    "discdop467",
+    "discwam478"
+  ],
+  "rules": {
+    "R1": {
+      "description": "Conditions block is always empty",
+      "support": "14/14",
+      "confidence": 1.0
+    },
+    "R2": {
+      "description": "PrivateLabels always contains exactly PL1",
+      "support": "14/14",
+      "confidence": 1.0
+    },
+    "R3": {
+      "description": "AwardAppliesTo always HighestPriceFirstMayOverlapConditions",
+      "support": "14/14",
+      "confidence": 1.0
+    },
+    "R4": {
+      "description": "Name always equals Description",
+      "support": "14/14",
+      "confidence": 1.0
+    },
+    "R5": {
+      "description": "No PFIDList block present",
+      "support": "14/14",
+      "confidence": 1.0
+    },
+    "P_amt_type": {
+      "description": "AwardAmountType distribution",
+      "data": {
+        "Unlimited": 27,
+        "Units": 13
+      },
+      "total_awards": 40,
+      "note": "Unlimited is the default; Units only for use-limit promos (goes with UseLimit=1)"
+    },
+    "P_award_type": {
+      "description": "AwardType distribution",
+      "data": {
+        "SetAmount": 38,
+        "PercentOff": 2
+      },
+      "total_awards": 40,
+      "note": "SetAmount is the default; PercentOff used for fee waivers (no AwardCurrencies)"
+    },
+    "P_currencies": {
+      "description": "Currency patterns across corpus",
+      "frequency": {
+        "USD": "34/14",
+        "INR": "19/14",
+        "EUR": "8/14",
+        "BRL": "8/14",
+        "ILS": "8/14",
+        "CLP": "8/14",
+        "TRY": "8/14",
+        "COP": "8/14",
+        "GBP": "7/14",
+        "CHF": "7/14",
+        "NZD": "7/14",
+        "PEN": "7/14",
+        "DKK": "7/14",
+        "HKD": "7/14",
+        "KRW": "7/14",
+        "ZAR": "7/14",
+        "MXN": "7/14",
+        "VND": "7/14",
+        "AED": "7/14",
+        "SAR": "7/14",
+        "AUD": "6/14",
+        "CAD": "6/14",
+        "TWD": "6/14",
+        "SGD": "6/14",
+        "JPY": "6/14",
+        "SEK": "6/14",
+        "PKR": "6/14",
+        "MYR": "6/14",
+        "PLN": "6/14",
+        "THB": "6/14",
+        "PHP": "6/14",
+        "IDR": "6/14",
+        "CNY": "5/14",
+        "NOK": "3/14",
+        "UAH": "3/14",
+        "EGP": "3/14",
+        "CZK": "2/14"
+      },
+      "usd_only_promos": "5/14",
+      "no_usd_promos": "5/14",
+      "has_inr_promos": "5/14",
+      "note": "USD-only = US-market-only scope. No USD = ROW-only scope. INR present in 5/14 promos \u2014 global or IN-scope."
+    },
+    "P_restrictions": {
+      "description": "Restriction field distribution",
+      "data": {
+        "NoRestriction": 11,
+        "RestrictedNewShoppersOnlyAndInActiveCustomersOnly": 1,
+        "Restricted": 2
+      },
+      "note": "NoRestriction is the default. Others indicate eligibility constraints."
+    }
+  }
+}

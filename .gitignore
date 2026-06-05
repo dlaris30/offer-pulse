@@ -22,3 +22,6 @@ Reference Docs/
 .claude/skills/surface-profile/
 .claude/skills/offer-pulse-external/
 .claude/skills/package-catalog/
+
+# Node dependencies
+node_modules/

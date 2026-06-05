@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-16"?>
+<!-- PRICING-15246 | DOP 50% off A/B experiment | PercentOff=50 | PFID 900 | Restriction=Restricted | NumberOfUses=1 -->
+<ProductPromo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StartDate>2026-02-18T00:00:00</StartDate>
+  <ExpirationDate>2027-01-01T00:00:00</ExpirationDate>
+  <Active>1</Active><IsActive>true</IsActive>
+  <CreatedDate>0001-01-01T00:00:00</CreatedDate>
+  <UseLimit xsi:nil="true" />
+  <PromoCode>discdop467</PromoCode>
+  <IsPhoneValidationEnabled>false</IsPhoneValidationEnabled>
+  <Name>Discount for A/B Experiment 50% off DOP</Name>
+  <Description>Discount for A/B Experiment 50% off DOP</Description>
+  <Type>DiscountCode</Type>
+  <CampaignTypeID>1</CampaignTypeID>
+  <NumberOfCurrencies>0</NumberOfCurrencies>
+  <RankValue>10</RankValue><Rank>10</Rank>
+  <NumberOfUses>1</NumberOfUses>
+  <PromoExclusion>0</PromoExclusion>
+  <Conditions />
+  <Awards>
+    <ProductAwardV2><AwardId>1</AwardId><AwardAmountType>Unlimited</AwardAmountType><AwardType>PercentOff</AwardType><AwardQuantity xsi:nil="true" /><PercentOff>50</PercentOff><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>900</int></PfIds></ProductAwardV2>
+  </Awards>
+  <AwardAppliesTo>HighestPriceFirstMayOverlapConditions</AwardAppliesTo>
+  <PrivateLabels><PrivateLabelV2><PrivateLabelID>1</PrivateLabelID><IsActive>true</IsActive><StartDate>0001-01-01T00:00:00</StartDate><EndDate>0001-01-01T00:00:00</EndDate><New>false</New><Remove>false</Remove></PrivateLabelV2></PrivateLabels>
+  <ShopperIdRestrictions /><Restriction>Restricted</Restriction>
+  <Version>3</Version>
+  <UsageType>NotShopperRestricted</UsageType>
+  <DeprecatedMatchedAwardPromo>false</DeprecatedMatchedAwardPromo>
+  <UnsupportedConditionsOrAwards>false</UnsupportedConditionsOrAwards>
+</ProductPromo>

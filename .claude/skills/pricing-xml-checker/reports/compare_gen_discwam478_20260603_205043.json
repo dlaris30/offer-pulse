@@ -1,0 +1,107 @@
+{
+  "timestamp": "2026-06-03T20:50:43.606828",
+  "generated": "gen_discwam478.xml",
+  "expected": "ssot_discwam478.xml",
+  "hard_fails": [],
+  "diffs": [
+    {
+      "field": "PromoCode",
+      "status": "MATCH",
+      "generated": "discwam478",
+      "expected": "discwam478"
+    },
+    {
+      "field": "StartDate",
+      "status": "MISMATCH",
+      "generated": "FLAGGED",
+      "expected": "2025-10-22T00:00:00"
+    },
+    {
+      "field": "ExpirationDate",
+      "status": "MISMATCH",
+      "generated": "2099-01-01T00:00:00",
+      "expected": "2036-01-01T00:00:00",
+      "note": "Off by 23011 day(s)"
+    },
+    {
+      "field": "Name",
+      "status": "MISMATCH",
+      "generated": "WAM Lite Email Essentials bundle sale pricing",
+      "expected": "Solution Set for Domain, EE, DOP, and WAM Lite - 47.88"
+    },
+    {
+      "field": "Description",
+      "status": "MISMATCH",
+      "generated": "WAM Lite Email Essentials bundle sale pricing",
+      "expected": "Solution Set for Domain, EE, DOP, and WAM Lite - 47.88"
+    },
+    {
+      "field": "Rank",
+      "status": "MATCH",
+      "generated": "10",
+      "expected": "10"
+    },
+    {
+      "field": "Restriction",
+      "status": "MATCH",
+      "generated": "NoRestriction",
+      "expected": "NoRestriction"
+    },
+    {
+      "field": "Conditions empty",
+      "status": "MATCH",
+      "generated": "True",
+      "expected": "True"
+    },
+    {
+      "field": "PrivateLabels PL1",
+      "status": "MATCH",
+      "generated": "['1']",
+      "expected": "['1']"
+    },
+    {
+      "field": "AwardAppliesTo",
+      "status": "MATCH",
+      "generated": "HighestPriceFirstMayOverlapConditions",
+      "expected": "HighestPriceFirstMayOverlapConditions"
+    },
+    {
+      "field": "PFIDList absent",
+      "status": "MATCH",
+      "generated": "True",
+      "expected": "True"
+    },
+    {
+      "field": "PFID set",
+      "status": "MISMATCH",
+      "generated": "2 PFIDs",
+      "expected": "4 PFIDs",
+      "note": "Missing 3 PFIDs: [101, 1329767, 2016317] | Extra 1 PFIDs: [2016155]"
+    },
+    {
+      "field": "Currency set",
+      "status": "MATCH",
+      "generated": "['USD']",
+      "expected": "['USD']",
+      "note": ""
+    },
+    {
+      "field": "USD amounts",
+      "status": "MISMATCH",
+      "generated": "",
+      "expected": "",
+      "note": "PFID 2016157: gen=$258.24 exp=$21.52"
+    },
+    {
+      "field": "Award row count",
+      "status": "MISMATCH",
+      "generated": "2",
+      "expected": "4"
+    }
+  ],
+  "summary": {
+    "hard_fail_count": 0,
+    "mismatch_count": 7,
+    "warn_count": 0
+  }
+}

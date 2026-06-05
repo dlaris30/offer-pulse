@@ -93,7 +93,28 @@ git clone https://github.com/dlaris30/offer-pulse.git ~/projects/offer-pulse
 
 ---
 
-## Step 3 — Add the Launch Alias
+## Step 3 — Install the Live-Surface Scrapers
+
+The `/live-surface` skill uses Puppeteer to scrape GoDaddy test pages for live curated offer IDs. The scripts are included in the repo under `scrapers/`.
+
+```bash
+cd ~/projects/offer-pulse/scrapers
+npm install
+```
+
+This installs Puppeteer and its bundled Chromium browser (~300 MB). Only needed once.
+
+> **VPN required.** The scraper hits `test-godaddy.com`, which is only reachable on the GoDaddy internal network. If `/live-surface` returns an empty result or a navigation timeout, connect to VPN first.
+
+**Verify the install:**
+```bash
+node ~/projects/offer-pulse/scrapers/extract_curated_offers.js https://www.test-godaddy.com/hosting/wordpress-hosting 2>/dev/null
+```
+Should return a JSON array of curated offer objects. If it returns `[]`, check VPN.
+
+---
+
+## Step 4 — Add the Launch Alias
 
 Open `~/.bashrc` (or `~/.zshrc` if you use zsh) and add:
 ```bash

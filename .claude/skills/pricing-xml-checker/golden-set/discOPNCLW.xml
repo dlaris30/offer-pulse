@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-16"?>
+<!-- PRICING-15503 | OpenClaw for GoDaddy VPS Coupon | VPS Starter + Pro | USD + INR | 12 PFIDs -->
+<ProductPromo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StartDate>2026-04-21T00:00:00</StartDate>
+  <ExpirationDate>2027-01-01T00:00:00</ExpirationDate>
+  <Active>1</Active><IsActive>true</IsActive>
+  <CreatedDate>0001-01-01T00:00:00</CreatedDate>
+  <UseLimit xsi:nil="true" />
+  <PromoCode>discOPNCLW</PromoCode>
+  <IsPhoneValidationEnabled>false</IsPhoneValidationEnabled>
+  <Name>PRICING-15503 OpenClaw for GoDaddy VPS Coupon</Name>
+  <Description>PRICING-15503 OpenClaw for GoDaddy VPS Coupon</Description>
+  <Type>DiscountCode</Type>
+  <CampaignTypeID>1</CampaignTypeID>
+  <NumberOfCurrencies>0</NumberOfCurrencies>
+  <RankValue>10</RankValue><Rank>10</Rank>
+  <NumberOfUses xsi:nil="true" />
+  <PromoExclusion>0</PromoExclusion>
+  <Conditions />
+  <Awards>
+    <!-- Starter 1mo --><ProductAwardV2><AwardId>1</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066865</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>13.99</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>1309</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Starter 3mo --><ProductAwardV2><AwardId>2</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066870</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>41.97</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>3927</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Starter 6mo --><ProductAwardV2><AwardId>3</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066873</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>59.94</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>5574</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Starter 12mo --><ProductAwardV2><AwardId>4</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066874</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>107.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>10068</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Starter 24mo --><ProductAwardV2><AwardId>5</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066877</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>215.76</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>20136</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Starter 36mo --><ProductAwardV2><AwardId>6</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066880</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>323.64</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>30204</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 1mo --><ProductAwardV2><AwardId>9</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066904</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>25.99</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>2419</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 3mo --><ProductAwardV2><AwardId>10</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066907</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>77.97</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>7257</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 6mo --><ProductAwardV2><AwardId>11</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066909</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>89.94</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>8394</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 12mo --><ProductAwardV2><AwardId>12</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066910</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>155.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>14388</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 24mo --><ProductAwardV2><AwardId>13</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066912</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>311.76</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>28776</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+    <!-- Pro 36mo --><ProductAwardV2><AwardId>14</AwardId><AwardAmountType>Units</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity>1</AwardQuantity><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>1066914</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>467.64</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>INR</Currency><DiscountAmount>43164</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+  </Awards>
+  <AwardAppliesTo>HighestPriceFirstMayOverlapConditions</AwardAppliesTo>
+  <PrivateLabels><PrivateLabelV2><PrivateLabelID>1</PrivateLabelID><IsActive>true</IsActive><StartDate>0001-01-01T00:00:00</StartDate><EndDate>0001-01-01T00:00:00</EndDate><New>false</New><Remove>false</Remove></PrivateLabelV2></PrivateLabels>
+  <ShopperIdRestrictions /><Restriction>NoRestriction</Restriction>
+  <Version>10</Version>
+  <UsageType>NotShopperRestricted</UsageType>
+  <DeprecatedMatchedAwardPromo>false</DeprecatedMatchedAwardPromo>
+  <UnsupportedConditionsOrAwards>false</UnsupportedConditionsOrAwards>
+</ProductPromo>

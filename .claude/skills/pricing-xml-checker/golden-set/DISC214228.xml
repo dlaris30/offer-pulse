@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-16"?>
+<!-- PRICING-15489 | Email Essentials DPP config test | $0.99/mo | 17 currencies | 1 PFID | Evergreen -->
+<ProductPromo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StartDate>2024-02-12T00:00:00</StartDate>
+  <ExpirationDate>2099-01-01T00:00:00</ExpirationDate>
+  <Active>1</Active><IsActive>true</IsActive>
+  <CreatedDate>0001-01-01T00:00:00</CreatedDate>
+  <UseLimit xsi:nil="true" />
+  <PromoCode>DISC214228</PromoCode>
+  <IsPhoneValidationEnabled>false</IsPhoneValidationEnabled>
+  <Name>Promo code for DPP config package test to offer Email Essentials sale price at $.99</Name>
+  <Description>Promo code for DPP config package test to offer Email Essentials sale price at $.99</Description>
+  <Type>DiscountCode</Type>
+  <CampaignTypeID>1</CampaignTypeID>
+  <NumberOfCurrencies>0</NumberOfCurrencies>
+  <RankValue>10</RankValue><Rank>10</Rank>
+  <NumberOfUses xsi:nil="true" />
+  <PromoExclusion>0</PromoExclusion>
+  <Conditions />
+  <Awards>
+    <ProductAwardV2><AwardId>1</AwardId><AwardAmountType>Unlimited</AwardAmountType><AwardType>SetAmount</AwardType><AwardQuantity xsi:nil="true" /><PercentOff xsi:nil="true" /><SuppressIcannFees>false</SuppressIcannFees><PfIds><int>867688</int></PfIds><AwardCurrencies><ProductAwardCurrency><Currency>TWD</Currency><DiscountAmount>588</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>GBP</Currency><DiscountAmount>11.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>USD</Currency><DiscountAmount>11.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>CHF</Currency><DiscountAmount>14.43</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>EUR</Currency><DiscountAmount>15.48</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>SGD</Currency><DiscountAmount>22.68</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>CAD</Currency><DiscountAmount>23.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>JPY</Currency><DiscountAmount>2628</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>NZD</Currency><DiscountAmount>29.88</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>AUD</Currency><DiscountAmount>32.16</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>AED</Currency><DiscountAmount>66</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>ILS</Currency><DiscountAmount>66</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>DKK</Currency><DiscountAmount>120</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>HKD</Currency><DiscountAmount>144</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>SEK</Currency><DiscountAmount>168</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>NOK</Currency><DiscountAmount>180</DiscountAmount></ProductAwardCurrency><ProductAwardCurrency><Currency>KRW</Currency><DiscountAmount>25200</DiscountAmount></ProductAwardCurrency></AwardCurrencies></ProductAwardV2>
+  </Awards>
+  <AwardAppliesTo>HighestPriceFirstMayOverlapConditions</AwardAppliesTo>
+  <PrivateLabels><PrivateLabelV2><PrivateLabelID>1</PrivateLabelID><IsActive>true</IsActive><StartDate>0001-01-01T00:00:00</StartDate><EndDate>0001-01-01T00:00:00</EndDate><New>false</New><Remove>false</Remove></PrivateLabelV2></PrivateLabels>
+  <ShopperIdRestrictions /><Restriction>NoRestriction</Restriction>
+  <Version>24</Version>
+  <UsageType>NotShopperRestricted</UsageType>
+  <DeprecatedMatchedAwardPromo>false</DeprecatedMatchedAwardPromo>
+  <UnsupportedConditionsOrAwards>false</UnsupportedConditionsOrAwards>
+</ProductPromo>

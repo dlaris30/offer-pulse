@@ -567,6 +567,84 @@ Store both values in working state. Use them in output as specified in the Route
 
 \---
 
+## FOS Live-Surface Fast Path
+
+**Trigger — all three must be true:**
+1. Offer operation = Create/Clone (not Modify)
+2. Surface resolves to a FOS ITC — starts with `slp_` or `dlp_`
+3. Curated offer route confirmed (ticket requests NES clone, not CES change)
+
+When triggered, **skip Step B0 and Step A1 entirely.** The live page is the authoritative source for what's deployed on FOS NES surfaces — transaction data is not needed to discover what's there.
+
+---
+
+### Step LS1 — Call /live-surface
+
+Invoke the live-surface skill for the resolved ITC:
+
+```
+/live-surface {ITC}
+```
+
+**If live-surface returns "No test URL mapped for {ITC}":**
+
+The surface is not in the live-surface mapping table. This is expected for precheck, cart, checkout, and other non-SLP FOS sub-surfaces. Emit this disclosure and fall back to the standard path:
+
+```
+LIVE-SURFACE NOT AVAILABLE — {ITC}
+  The live-surface skill has no URL mapping for this surface.
+  Common reasons:
+    - Surface is dpp_precheck, cart, or checkout — these are CES-dominant and not scraped
+    - ITC has not yet been added to the live-surface mapping table
+
+  Routing to standard B0/A1 discovery path.
+  To enable live-surface for this ITC, add the test URL to .claude/skills/live-surface/SKILL.md.
+```
+
+Then proceed to Step B0 as normal.
+
+---
+
+### Step LS2 — Multi-ITC handling (when ITC is vague)
+
+When the surface is specified as "SLP" or "FOS" without a specific ITC slug, try `/live-surface` on each candidate ITC from the mapping table that matches the product type:
+
+| Matching ITCs returned | Action |
+|---|---|
+| 1 | Proceed with that ITC |
+| 2 | Run both in parallel; present both result sets |
+| 3+ | Run the single most likely ITC (closest product match to ticket); disclose: "Note: {N−1} other mapped ITCs were not scraped — confirm with analyst if broader coverage is needed" |
+
+---
+
+### Step LS3 — Identify clone source
+
+From the live-surface results, filter to the offer matching the product and tier in the ticket:
+
+- **≥90% confidence** (ticket names a specific tier AND exactly one live offer matches, or slug unambiguously matches the product) → name it as the clone source and proceed
+- **Below 90% confidence** (multiple candidates, ambiguous tier, or no clear match) → present all live offers and ask the analyst to confirm which to clone
+
+---
+
+### Step LS4 — Route Lock and handoff to catalog
+
+Once the clone source is confirmed, emit the Route Lock and proceed to Step A2a-SF using the live-surface-confirmed slug as the anchor. B0, Step A1, and the Step A2 branch decision are all skipped.
+
+```
+ROUTE: NES Curated Offer (FOS Live-Surface Fast Path) — {ITC}
+Champion confirmed via live page scrape: {curatedOfferId}
+B0 and Step A1 skipped — live surface is authoritative for FOS NES surfaces.
+```
+
+Set `LIVE_SURFACE_FAST_PATH = true` and pass the live-surface-confirmed slug and the LS3 confidence level to A2a-SF. A2a-SF will use these to apply the fast-path auto-select override (see A2a-SF Execution pause rule).
+
+**PFID handling on the fast path:** Do not run any PFID discovery queries. The catalog chain (Layer 1→2→3) provides everything the EP engineer needs. In the Quick Reference output, replace the PFID row with:
+```
+PFIDs            : not queried on fast path — run /pricing-ticket {ITC} if a pricing ticket is needed
+```
+
+---
+
 ## Path A — Curated Offer
 
 ### Step A1 — Surface Audit
@@ -788,7 +866,7 @@ Certain surfaces are confirmed CES-only — NES catalog entries may exist for th
 |Surface ITC pattern|Status|Notes|
 |-|-|-|
 |`ssl-config`|CES-only|SSL configuration surface; CES-only by design|
-|`slp\_wsb\_\*`|CES-only|WAM/WSB Sales Landing Pages; NES migration not yet live on these ITCs|
+|`slp\_wsb\_\*`|CES-only (verify)|WAM/WSB Sales Landing Pages; NES migration status uncertain — live-surface scrape (2026-05-28) found NES offers on `slp\_wsb\_ft\_getstarted\_plans\_nocc` (`wsb-vnext-tier1` etc.) but billing NES% for these ITCs is unconfirmed. Run `/migration-check slp\_wsb\_ft\_getstarted\_plans\_nocc` before treating as CES-only. If billing confirms NES > 0%, remove from this registry.|
 |`dpp\_precheck`|Mixed|Email essentials NES offers ARE live (temp-email-essentials-99 and temp-email-essentials-149 confirmed active). CES-dominant for non-email products — for non-email product queries at this surface, skip pre-launch NES check.|
 |`upp\_\*`|CES-only|Upsell Purchase Path; not on NES migration roadmap|
 
@@ -1014,7 +1092,7 @@ From the `get\_offer\_collection\_definition` response, use the `offers\[]` arra
 * Range excludes target → `Term-incompatible — collection does not support {N}-year`
 * Field absent → `Term schema not found — confirm with ecomm`
 
-**Billing confirmation status:** A family member is `Billing-confirmed` if its slug appeared as a non-null `package\_id` in Step A1 billing results for the target PFID. Otherwise: `Catalog family — billing unconfirmed for PFID {target\_pfid}`. When GAP-042 is active: `GAP-042 confirmed (traffic events)` for traffic-sourced slugs; `Catalog family — billing unconfirmed (GAP-042 active)` for all others.
+**Billing confirmation status:** A family member is `Billing-confirmed` if its slug appeared as a non-null `package\_id` in Step A1 billing results for the target PFID. Otherwise: `Catalog family — billing unconfirmed for PFID {target\_pfid}`. When GAP-042 is active: `GAP-042 confirmed (traffic events)` for traffic-sourced slugs; `Catalog family — billing unconfirmed (GAP-042 active)` for all others. When `LIVE_SURFACE_FAST_PATH = true`: use `Live-surface-confirmed (scrape {scrape\_date})` — slug was sourced from a live production page scrape by /live-surface on `{scrape\_date}`; no billing query was run. This label applies to all rows produced on the fast path.
 
 \---
 
@@ -1068,6 +1146,8 @@ Confirm your selection and I will proceed with the full catalog resolution using
 **Execution pause rule:** After rendering the Catalog Family table and Analyst Action Required block, pause and wait for the analyst's selection before running `get\_curated\_offer` on the selected slug. Do not auto-select based on component count, billing volume, or slug naming convention.
 
 **Exception — single billing-confirmed slug:** If the Catalog Family table contains exactly one `Billing-confirmed` row AND the analyst's request stated no specific component configuration preference, do not pause. Proceed with that slug and note: `Auto-selected: {slug} — sole billing-confirmed family member; no component preference stated. Confirm this is the intended clone source.`
+
+**Exception — fast-path override:** If `LIVE_SURFACE_FAST_PATH = true` AND /live-surface returned exactly one slug for this ITC AND LS3 confidence was ≥90%, do not pause. Auto-select the live-surface-confirmed slug and note: `Auto-selected: {slug} — live-surface-confirmed (FOS fast path, ≥90% confidence); no billing query was run. Confirm this is the intended clone source.` Billing-confirmed status is not required for this trigger.
 
 \---
 

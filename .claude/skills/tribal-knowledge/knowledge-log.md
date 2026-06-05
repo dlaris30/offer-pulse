@@ -1240,3 +1240,81 @@ Archive note : —
 Archived     : —
 
 ---
+
+## TK-049
+Title      : Three distinct reasons why package_id is NULL in offer_pulse_experiment
+Status     : active
+Category   : Domain Fact
+Tags       : package_id, null, offer_pulse_experiment, cart-bypass, itc-mismatch, ces, pipeline
+Added      : 2026-05-31
+Source     : Validation thread with Daniel Laris, 2026-05-31
+Related    : TK-001, TK-021, TK-048, GAP-042
+
+package_id is NULL for a row in offer_pulse_experiment for one of three distinct reasons:
+
+1. Cart bypass — the customer went directly from impression to checkout without an
+   add-to-cart event firing. No cart event means no package_id was ever captured.
+   The pipeline has nothing to join on.
+
+2. ITC mismatch — the ITC recorded at the cart step did not match the ITC recorded
+   at purchase. The join between add-to-cart events and billing uses ITC as a key;
+   when the two ITCs diverge (e.g. referring ITC vs referred ITC at add-to-cart),
+   the lookup misses and package_id is left NULL even if the offer was NES.
+
+3. CES by design — the product has no package_id because it was served through the
+   CES legacy system. No package_id was ever emitted.
+
+Implication: the ~42.5% null figure in completed transactions is NOT purely a CES
+coverage problem. An unknown portion of those null rows are NES products that lost
+their package_id due to cart bypass or ITC mismatch — infrastructure gaps, not CES/NES
+classification gaps. The three causes are not distinguishable from offer_pulse_experiment
+alone. This means NES migration alone will not close the full null gap — cart bypass and
+ITC mismatch are structural pipeline issues that exist independently of CES/NES status.
+
+Archive note : —
+Archived     : —
+
+---
+
+## TK-050
+Title      : office365-tier0 carries ITC slp_powerbi on /email hub and /business/office-365, but slp_365_email on the professional email sub-page
+Status     : active
+Category   : System Behavior
+Tags       : office365-tier0, slp_365_category, slp_365_email, slp_365, itc, email, m365, live-surface
+Added      : 2026-06-02
+Source     : live-surface scrape observation
+
+The M365 Email Essentials package (`office365-tier0`) appears on three M365 email pages with
+different embedded ITCs depending on the page:
+- `/email` (hub, slp_365_category): office365-tier0 carries ITC `slp_powerbi`
+- `/email/professional-business-email` (slp_365_email): office365-tier0 carries ITC `slp_365_email`
+- `/business/office-365` (slp_365): office365-tier0 carries ITC `slp_powerbi`
+
+This is not a scraper error — it reflects how each page's Sitecore config embeds the ITC.
+The "canonical" ITC for Email Essentials purchases that originate on the professional email
+sub-page is `slp_365_email`. The `slp_powerbi` ITC on the hub and business page is anomalous
+and may cause billing attribution confusion.
+
+Archive note : —
+Archived     : —
+
+---
+
+## TK-051
+Title      : errorRedirectUrl pointing to /godaddy-503 observed in page source of M365 email pages
+Status     : active
+Category   : System Observation
+Tags       : live-surface, email, m365, errorRedirectUrl, page-source, scraper
+Added      : 2026-06-02
+Source     : analyst observation during /live-surface inspection of /email
+
+The page source of https://www.godaddy.com/email (and possibly other M365 email pages)
+contains `"errorRedirectUrl": "https://www.godaddy.com/godaddy-503"`. This is a fallback
+redirect URL embedded in the page config — likely a Sitecore or component-level error
+handler that redirects users to the standard 503 maintenance page if the component fails
+to load. Not a signal of an active error; it is a static config value. Analysts doing
+manual page inspection should not interpret its presence as indicating a problem unless
+the page is actually failing to render plan boxes.
+
+Archive note : —
+Archived     : —

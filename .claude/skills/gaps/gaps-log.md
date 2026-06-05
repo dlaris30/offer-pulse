@@ -1529,3 +1529,85 @@ Resolution : —
 Resolved   : —
 
 ---
+
+## GAP-044
+Title      : Surface data gate bypassed before path selection — Jira ticket chain shortcuts
+             Step A1, so surface type is never confirmed from billing data
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-28
+Evidence   : EP-89137 Norton precheck case (2026-05-27). Entry via Jira ticket with
+             dpp_precheck as target surface. Execution followed EP-89137 → AGIGROWTH-79 →
+             EP-84398 → EP-75969 to find source curated offers, then went directly to
+             catalog lookup. Step A1 surface audit on dpp_precheck never ran. Surface
+             data shows 100% CES (NULL package_ids, 198K orders). If Step A1 had run
+             first, surface would have been typed as CES before any catalog path selection.
+
+The HARD CONSTRAINT "champion is determined from data and the catalog MCP only" implies
+Step A1 must run before catalog lookups — but execution can shortcut it by using offers
+identified in the Jira ticket chain as the anchor for get_curated_offer calls. When the
+ticket names source curated offers (or links to prior EP tickets containing them), there
+is no explicit gate preventing those slugs from being used as the catalog anchor before
+billing data is checked.
+
+Impact: incorrect path selection when the Jira ticket chain points to NES offers that are
+not live on the target surface. The skill will produce NES output for a CES-dominant
+surface, and the surface type disclosure will be absent from the output.
+
+Fix direction: add an explicit guard in Entry Option 1 after the multi-arm detection step:
+"Never use curated offer slugs identified from linked tickets as the anchor for catalog
+lookup before Step A1 runs. Extract slug context from the ticket for orientation only.
+The surface type gate (Step A2 NES% calculation) must complete before any catalog path
+is selected. Only slugs confirmed in billing data (Step A1) or the pre-launch NES check
+serve as catalog anchors." This makes the existing HARD CONSTRAINT explicit at the Entry
+Option 1 step where the shortcut occurs.
+
+Resolution : —
+Resolved   : —
+
+---
+
+## GAP-045
+Title      : Source-surface ≠ target-surface cloning unhandled — when ticket requests
+             cloning NES offers from FOS for deployment on precheck, skill has no
+             separate source/target surface path
+Status     : open
+Category   : Skill Gap
+Skill      : offer-pulse
+Added      : 2026-05-28
+Evidence   : EP-89137 Norton precheck case (2026-05-27); /ces-nes architectural review
+             2026-05-28 confirmed merch API is CES-only — cannot surface NES curated
+             offers under any PFID query.
+
+Original framing (pre /ces-nes review): "add PFID → merch API lookup in parallel with
+catalog path when surface is CES/ambiguous." /ces-nes verdict: the V1 merch API
+(https://merchandising.api.godaddy.com/v1/packages) contains CES packages only. Querying
+it with the champion MWP PFID would return CES packages on that surface — confirming
+CES type — but would never surface wp-o365-forever-*-nortonsmb-standardfreetrial.
+These are catalog entries, not merch packages.
+
+The real gap: the skill assumes source surface = target surface in all clone operations.
+EP-89137 is a "clone NES offers from FOS for deployment on precheck" ticket. The correct
+source (wp-o365-forever-*-nortonsmb-standardfreetrial) is confirmed on slp_wordpress
+(FOS). The target is dpp_precheck (CES-dominant). The skill has no instruction for this
+pattern — it only knows how to find the champion on the target surface, not on a separate
+source surface named in the ticket.
+
+Fix direction: in Entry Option 1, after ticket field extraction, check whether the ticket
+identifies a source surface distinct from the target surface (signals: "clone from FOS",
+"clone existing [product] offer", "extend to precheck", "bring to [target surface]").
+If source ≠ target:
+1. Run Step A1 on SOURCE surface to find the NES champion there.
+2. Run Step A1 separately on TARGET surface to classify it (NES/CES/pre-launch).
+3. Emit separate surface blocks: "Source Surface: {ITC} — champion found" and
+   "Target Surface: {ITC} — CES-dominant / pre-launch / etc."
+4. The clone source is from the SOURCE surface, not the target surface.
+Do NOT attempt merch API lookup to find NES source offers — /ces-nes confirmed this
+is architecturally invalid. NES offers are in catalog only.
+Related    : GAP-044, TK-001
+
+Resolution : —
+Resolved   : —
+
+---
