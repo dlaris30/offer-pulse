@@ -23,5 +23,10 @@ Reference Docs/
 .claude/skills/offer-pulse-external/
 .claude/skills/package-catalog/
 
+# In-development / internal-only skills
+.claude/skills/pricing-xml/
+.claude/skills/pricing-xml-checker/
+.claude/skills/wbr/
+
 # Node dependencies
 node_modules/
