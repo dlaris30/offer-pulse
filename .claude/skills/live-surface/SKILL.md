@@ -294,6 +294,28 @@ Scraping 6 markets in parallel.
 
 ---
 
+## Flow Router
+
+Determine execution path immediately after Step 0 completes. Hold the path for the entire run — do not re-evaluate mid-execution.
+
+Check in this order (first match wins):
+
+**Path C — Scrape-only** (`scrape-only` flag present in invocation)
+→ Run Step 1 (scrape). Run Step 1b (tier filter if supplied). Stop. Return raw JSON.
+→ Do not run Step 1B, 2, 3, 4, or 5.
+
+**Path B — Group** (2 or more markets to scrape)
+→ Run Step 1 (scrape all markets in parallel). Run Step 1B (group synthesis). Stop.
+→ Proceed to Step 5 group rendering path.
+→ Do not run Steps 2, 3, or 4.
+
+**Path A — Single market** (1 market, no scrape-only flag)
+→ Run Steps 1 → 1b → 2 → 3 → 4 → 5 (single-offer render).
+
+`scrape-only` takes priority over market count. A multi-market scrape-only call follows Path C, not Path B.
+
+---
+
 ## Step 1 — Scrape the Page
 
 Look up the test URL and Scrape Pattern for the ITC.
@@ -371,7 +393,8 @@ Carry forward into Step 5:
 - `empty_markets` — tokens with empty scrape result
 - `failed_markets` — tokens where scraper returned an error
 
-After Step 1B completes, skip Steps 2, 3, and 4. Proceed directly to Step 5 using the group rendering path.
+▶ **Path B exit — STOP HERE. Do not proceed to Steps 2, 3, or 4.**
+Jump directly to Step 5 — Group Rendering Path.
 
 ---
 
