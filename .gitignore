@@ -11,15 +11,11 @@ Reference Docs/
 .claude/skills/golden-set/
 .claude/skills/overnight/
 .claude/skills/use-cases/
-.claude/skills/measure/
 .claude/skills/ledger/
 .claude/skills/wendy/
-.claude/skills/compare/
 .claude/skills/coverage/
-.claude/skills/freshness/
 .claude/skills/branch-map/
 .claude/skills/offer-matrix/
-.claude/skills/surface-profile/
 .claude/skills/offer-pulse-external/
 .claude/skills/package-catalog/
 
@@ -31,3 +27,6 @@ Reference Docs/
 
 # Node dependencies
 node_modules/
+
+# Python cache
+scrapers/__pycache__/

@@ -14,7 +14,6 @@ After the clarifying questions gate resolves, execute immediately and silently �
 
 * Read-only. Never create, update, transition, or comment on any Jira ticket without explicit analyst instruction.
 * Never read linked ecomm tickets. The champion is determined from data and the catalog MCP only.
-* Never read `.claude/skills/golden-set/golden-set.md` under any circumstances. That file is the scoring oracle — if offer-pulse reads it, any batch test run in this session is invalid.
 * Never show only the top result when multiple exist. A surface can have many PFIDs, many package IDs, and many discount codes simultaneously. Show all of them.
 * Every response ends with an explicit reminder that no ticket action has been taken.
 * Every markdown table must have one row per unique combination of values. Never compress multiple values into a single cell (e.g., if a PFID appears on 3 ITCs, that is 3 rows — not one row with "itc1, itc2, itc3" in the ITC cell).
@@ -49,12 +48,7 @@ These IDs appear in all Path A output. Use them consistently.
 |**Component Offer ID**|UUID from `prePurchaseKeyMap.offers\[].offerId`. Each is a bundled add-on (e.g. M365, Titan Email). Only present on Offer Collections. Retrieved via `get\_offer\_definition\_by\_id`.|`catalog-offers` datasource|
 |**CES Package ID**|Slug from the GoDaddy merchandising API (e.g. `wordpress-basic-ssl-1yr`). Used only on the CES fallback path — never present in billing data.|`https://merchandising.api.godaddy.com/v1/packages`|
 
-**Critical rule — geometry determines which fields to emit:**
-
-* `prePurchaseKeyMap` absent or empty → **Standalone**. Show `Offer ID` + `Plan`. Show `Offer Collection ID : Not available`. No component lines.
-* `prePurchaseKeyMap.offers\[]` has entries → **Offer Collection**. Show `Offer Collection ID` + one Component line per entry. No standalone `Plan` line.
-* Neither geometry returns an `offerId` → BLOCKING. Do not emit any ID fields.
-* Do not assume a Curated Offer ID always maps to a collection. Verify geometry from the response before emitting output.
+**Critical rule:** If neither geometry returns an `offerId` → BLOCKING — do not emit any ID fields. Do not assume a Curated Offer ID always maps to a collection — many standalones exist. Geometry determines which fields to emit; see Quick Reference.
 
 \---
 
@@ -145,18 +139,12 @@ Offer geometry (standalone vs bundle vs add-on vs upsell) is derived from data �
 
 **Skip if:** the request contains unambiguous language indicating the operation type:
 
-* **Create/Clone signals:** "create new", "clone", "new offer", "offer creation", "net-new", "build a new bundle" → Offer Operation = Create/Clone
+* **Create/Clone signals:** "create new", "clone", "new offer", "offer creation", "net-new", "build a new bundle", "create offer", "add to surface", "pricing change", "pricing update", "price update", "upsell" → Offer Operation = Create/Clone
 * **Modify signals:** "add to", "add \[product] to existing", "add component to", "modify", "update the bundle", "wire \[product] into", "add \[product] as an add-on to existing bundles" → Offer Operation = Modify
 
 **Pricing-framing inference layer (check before asking):**
 
 Before presenting the Dimension 0 question, inspect the input for operation signals. Apply the first rule that yields an unambiguous result.
-
-**Signals that resolve D0 WITHOUT asking (explicit and unambiguous — covered by Skip if above):**
-These fire before any question is asked. If any apply, D0 is resolved — do not ask.
-
-* Create/Clone: `new offer`, `clone`, `create offer`, `add to surface`, `net-new`, `build a new bundle`, `pricing change`, `pricing update`, `price update`, `upsell`
-* Modify: `add to`, `add \[product] to existing`, `add component to`, `modify`, `update the bundle`, `wire \[product] into`
 
 **Pricing-amount signals (direction-neutral — do NOT auto-proceed):**
 
@@ -307,13 +295,38 @@ Question: "Which markets should this cover? (e.g. US only, ROW, India, all marke
 
 **Primary signal — Jira `customfield\_34656`:** When the entry is a Jira ticket, read this field first. Its value is the authoritative surface and overrides the ticket title and description. If `customfield\_34656` and the title/description disagree, flag the conflict explicitly before proceeding — do not silently resolve in favor of either.
 
+**Bypass A — URL match (check before asking):** If the request contains a URL, resolve D4 from the URL directly — do not read any file. Common URL → ITC mappings: `/hosting/wordpress-hosting` → `slp_wordpress`; `/hosting/web-hosting` → `slp_hosting_4GH`; `/email/professional-business-email` → `slp_365_email`; `/business/office-365` → `slp_365`; `/email` → `slp_365_category`; `/websites/website-builder` → `slp_wsb_ft_getstarted_plans_nocc`; `/hosting/vps-hosting` → `Slp_vps4_linux`; `/web-security/ssl-certificate` → `slp_ssl`. Document internally as `D4 resolved: URL match → {itc}`. Do not ask.
+
+**Bypass B — Product-qualified FOS alias (check before asking):** If the request uses "FOS", "Front of Site", or "SLP" paired with a product qualifier, resolve D4 from this inline table — do not read any file:
+
+| Analyst says (case-insensitive, substring match) | ITC |
+|---|---|
+| FOS wordpress, MWP SLP, wordpress SLP, wordpress hosting SLP, managed wordpress, managed wordpress hosting | `slp_wordpress` |
+| FOS web hosting, web hosting SLP, hosting SLP, 4GH SLP | `slp_hosting_4GH` |
+| FOS email, email SLP, M365 hub, M365 email hub, 365 hub | `slp_365_category` |
+| professional email SLP, business email SLP, M365 email SLP, M365 EE SLP, email essentials SLP | `slp_365_email` |
+| M365 business SLP, office365 SLP, M365 365 SLP, M365 SLP | `slp_365` |
+| WSB SLP, website builder SLP, website builder SLP, airo WSB | `slp_wsb_ft_getstarted_plans_nocc` |
+| airo wordpress SLP, airo WP SLP | `slp_airo_wordpress` |
+| airo AI builder SLP, AI website builder SLP | `slp_airoaibuilder` |
+| airo plus SLP | `slp_airo_plus` |
+| VPS SLP, VPS hosting SLP | `Slp_vps4_linux` |
+| SSL SLP, SSL certificate SLP | `slp_ssl` |
+| security SLP, website security SLP | `slp_website_security_suites` |
+| DM SLP, digital marketing SLP | `digital_marketing_suite_reach` |
+| DDC, discount domain club SLP | `ddc_starter_01` |
+| wordpress support SLP, WP support SLP | `slp_wordpress_support` |
+| hosting solutions SLP, hosting category SLP | `slp_hosting_category` |
+
+If exactly one row matches AND no competing surface signal is present in the request (none of: "precheck", "dpp\_precheck", "cart", "checkout") — resolve D4 to that ITC without asking. Document internally as `D4 resolved: FOS + product qualifier → {itc}`. If the alias is ambiguous or a competing surface signal is present, fall through to the clarification question below. If the alias is not in this table: ask the analyst which surface they mean — do not read any file.
+
 **FOS / "Front of Site" requires clarification:** FOS is a broad term covering multiple sub-surfaces — it does NOT map exclusively to SLP. When a ticket or prompt uses "FOS" or "Front of Site" without specifying a sub-surface, and `customfield\_34656` is also absent or generic, ask which sub-surface is intended before proceeding:
 
 > "FOS covers multiple sub-surfaces. Which does this ticket target? (a) SLP — Sales Landing Page (`slp\_\*`), (b) Cart, (c) Precheck (`dpp\_precheck`), or (d) Checkout?"
 
 **SLP → DLP billing pattern:** When the resolved surface is `slp\_\*`, flag this in the output: SLP is the *referring* ITC — when customers click through from the SLP to purchase, the transaction may log under a `dlp\_\*` ITC in billing (e.g. `slp\_wordpress` traffic often transacts as `dlp\_wordpress\_hosting`). Query both the SLP ITC and its associated DLP ITC when auditing SLP surfaces. State both in the output.
 
-**Skip if:** an exact ITC string is given (e.g. `slp\_wordpress`), `customfield\_34656` resolves to a specific surface, or the entry is product-name-first or PFID-first with no surface reference.
+**Skip if:** an exact ITC string is given (e.g. `slp\_wordpress`), `customfield\_34656` resolves to a specific surface, the entry is product-name-first or PFID-first with no surface reference, Bypass A fires (URL matches the live-surface ITC mapping table), or Bypass B fires (FOS + product qualifier resolves to a single unambiguous ITC with no competing surface signal present).
 
 **Ask if:** a surface category is named without an exact ITC (e.g. "the SLP", "DPP surfaces", "FOS") AND `customfield\_34656` is absent or ambiguous AND the request has enough other specificity that narrowing would meaningfully reduce output. Do not ask if the analyst's stated purpose is a full surface audit.
 
@@ -355,12 +368,10 @@ Question: "Which billing term(s) should this cover? (e.g. 1 Year, 2 Year, 3 Year
 
 * **Specific term(s) given** (e.g. "1-year" or "1-year and 2-year"): add `AND product\_term\_num = {N} AND product\_term\_unit\_desc = '{unit\_lowercase}'` to **Step A1 only. Do NOT add this filter to Step B0 or Step M1** — those steps enumerate the complete PFID universe and must run without term restriction (see HARD CONSTRAINT in each). `{unit\_lowercase}` is always lowercase: `'year'`, `'month'`, `'quarter'`. When multiple terms are specified, use `AND (product\_term\_num, product\_term\_unit\_desc) IN (({N1}, 'year'), ({N2}, 'month'))` — lowercase values only.
 
-  **HARD CONSTRAINT — no scoping filter (term, segment, or volume) EVER applies to Step B0 or Step M1.** These are PFID discovery steps — their job is to enumerate the complete product universe across all terms and segments. Applying a term filter, a `new\_customer\_orders > 0` filter, or a volume minimum at this stage produces an incomplete PFID list, which causes entire bundles to be silently missed downstream. These filters belong exclusively in the experiment query (Step A1).
-
 * **"All terms" or "unknown":** Do not filter. Run all queries without a term filter, but **group and display term as a first-class column** in every result table and every output block. Note clearly at the top of the output: "TERM SCOPE: All terms — output includes mixed-term results. Champion and PFID lists are not scoped to a single term; confirm the correct term with the analyst before filing the ticket."
 * **Term stated in the Jira ticket:** extract it from the ticket body and skip the question. If the ticket body is ambiguous (e.g. "annual" could mean 1-year or 12-month), list both interpretations and ask for confirmation before running queries.
 
-  **Unit normalization:** analysts may say "annual" (= 1 Year), "biennial" or "2-year" (= 2 Year), "triennial" or "3-year" (= 3 Year), "monthly" (= 1 Month). Translate to `product\_term\_num` + `product\_term\_unit\_desc` before filtering. **`product\_term\_unit\_desc` values are always lowercase in the billing table: `'year'` not `'Year'`, `'month'` not `'Month'`, `'quarter'` not `'Quarter'`.** If the translation is ambiguous, state the assumption and confirm.
+  **Unit normalization:** analysts may say "annual" (= 1 Year), "biennial" or "2-year" (= 2 Year), "triennial" or "3-year" (= 3 Year), "monthly" (= 1 Month). Translate to `product\_term\_num` + `product\_term\_unit\_desc` before filtering. If the translation is ambiguous, state the assumption and confirm.
 
   \---
 
@@ -556,6 +567,10 @@ For known domain facts, surface quirks, and naming conventions not captured in t
 
 Bulk table matches are low-confidence — if the ITC is resolved from the bulk table, add `(surface label confidence: low — run /surface-vocab explore to promote to full profile)` to the output.
 
+**When `LIVE_SURFACE_FAST_PATH = true`:** skip this enrichment. Set `surface_label` to the ITC string and `surface_nes_ces` to 'NES' — already confirmed at gate.
+
+**When `LIVE_SURFACE_FAST_PATH = false`:**
+
 **Surface vocab enrichment (runs after any ITC is resolved — from the map above, vocab fallback, or direct analyst input):**
 
 Once the ITC is resolved by any method, look it up in `surface-vocab.md` and extract:
@@ -578,42 +593,41 @@ When triggered, **skip Step B0 and Step A1 entirely.** The live page is the auth
 
 ---
 
-### Step LS1 — Call /live-surface
+### Step LS1 — Scrape the live surface
 
-Invoke the live-surface skill for the resolved ITC:
+**Do NOT invoke the `/live-surface` skill. Do NOT read `.claude/skills/live-surface/SKILL.md`. Run the scraper bash command directly.**
 
+Look up the URL for the resolved ITC from the Bypass A URL table in D4 (the URL was already resolved during dimension gating). Then determine the scrape pattern and run the appropriate command:
+
+| Pattern | Surfaces | Command |
+|---|---|---|
+| `nes-prefix` | slp_wordpress, slp_airo_wordpress, slp_wordpress_support, slp_hosting_category | `node scrapers/extract_curated_offers.js {URL} 2>/dev/null` |
+| `productPackage` | slp_hosting_4GH, slp_365_*, slp_wsb_*, slp_ssl, slp_website_security_suites, slp_airoaibuilder, slp_airo_plus, ddc_starter_01 | `node scrapers/debug_email.js {URL} 2>/dev/null` |
+
+For `nes-prefix` output: each item has `curatedOfferId` (already stripped of `nes-` prefix), `planType`, `recommended`, `salePrice`, `oldPrice`, `priceTag`, `itc`, `destination`.
+For `productPackage` output: extract `productPackage` field as `curatedOfferId`, strip `nes-` prefix if present.
+
+**Tier filter (Step LS1b — inline, fires only when a tier was resolved at intake):**
+Filter items where `planType` contains the tier string (case-insensitive substring match). If exactly one survives, proceed with that item. If zero survive, list the planTypes found and proceed with all items — do not block.
+
+**If the scraper returns an empty array:**
+Emit:
 ```
-/live-surface {ITC}
+No NES curated offers found on {URL} — routing to standard B0/A1 discovery path.
 ```
-
-**If live-surface returns "No test URL mapped for {ITC}":**
-
-The surface is not in the live-surface mapping table. This is expected for precheck, cart, checkout, and other non-SLP FOS sub-surfaces. Emit this disclosure and fall back to the standard path:
-
-```
-LIVE-SURFACE NOT AVAILABLE — {ITC}
-  The live-surface skill has no URL mapping for this surface.
-  Common reasons:
-    - Surface is dpp_precheck, cart, or checkout — these are CES-dominant and not scraped
-    - ITC has not yet been added to the live-surface mapping table
-
-  Routing to standard B0/A1 discovery path.
-  To enable live-surface for this ITC, add the test URL to .claude/skills/live-surface/SKILL.md.
-```
-
-Then proceed to Step B0 as normal.
+Set `LIVE_SURFACE_FAST_PATH = false` and proceed to Step B0.
 
 ---
 
 ### Step LS2 — Multi-ITC handling (when ITC is vague)
 
-When the surface is specified as "SLP" or "FOS" without a specific ITC slug, try `/live-surface` on each candidate ITC from the mapping table that matches the product type:
+When the surface is specified as "SLP" or "FOS" without a specific ITC slug, identify all candidate ITCs from the D4 Bypass B product-qualifier table that match the product type. For each candidate ITC, look up its URL from the Bypass A URL table (D4) and run the appropriate scraper command directly — do NOT invoke the `/live-surface` skill (same commands as Step LS1):
 
-| Matching ITCs returned | Action |
+| Matching ITCs with results | Action |
 |---|---|
-| 1 | Proceed with that ITC |
-| 2 | Run both in parallel; present both result sets |
-| 3+ | Run the single most likely ITC (closest product match to ticket); disclose: "Note: {N−1} other mapped ITCs were not scraped — confirm with analyst if broader coverage is needed" |
+| 1 ITC returned results | Proceed with that ITC |
+| 2 ITCs returned results | Run both in parallel; present both result sets |
+| 3+ ITCs returned results | Run the single most likely ITC (closest product match to ticket); disclose: "Note: {N−1} other mapped ITCs were not scraped — confirm with analyst if broader coverage is needed" |
 
 ---
 
@@ -622,7 +636,7 @@ When the surface is specified as "SLP" or "FOS" without a specific ITC slug, try
 From the live-surface results, filter to the offer matching the product and tier in the ticket:
 
 - **≥90% confidence** (ticket names a specific tier AND exactly one live offer matches, or slug unambiguously matches the product) → name it as the clone source and proceed
-- **Below 90% confidence** (multiple candidates, ambiguous tier, or no clear match) → present all live offers and ask the analyst to confirm which to clone
+- **Below 90% confidence** (multiple candidates, ambiguous tier, or no clear match) → do not emit intermediate output. Complete Steps LS4, LS5, and LS5b silently. After LS5b results are collected, pause and present all live offers to the analyst, asking which to clone before proceeding to output.
 
 ---
 
@@ -632,16 +646,117 @@ Once the clone source is confirmed, emit the Route Lock and proceed to Step A2a-
 
 ```
 ROUTE: NES Curated Offer (FOS Live-Surface Fast Path) — {ITC}
+       {prod URL from live-surface ITC mapping table}
 Champion confirmed via live page scrape: {curatedOfferId}
 B0 and Step A1 skipped — live surface is authoritative for FOS NES surfaces.
 ```
 
+**Market-aware URL construction:** If a market was resolved earlier in the clarifying questions gate (Step D2), construct the scraper URL using the market token from the live-surface Market Resolution table rather than the bare US URL. For path-prefix markets: `https://www.godaddy.com/{market-token}{base_path}`. For subdomain markets (ko-KR, ja-JP, nb-NO, sv-SE, da-DK): `https://{subdomain}.godaddy.com{base_path}`. US-only tickets use the base URL unchanged. This ensures the scraped offers match the market in scope — especially critical for markets that receive `-ox`/Titan Email variants instead of `-365-`/M365 offers (e.g., India).
+
 Set `LIVE_SURFACE_FAST_PATH = true` and pass the live-surface-confirmed slug and the LS3 confidence level to A2a-SF. A2a-SF will use these to apply the fast-path auto-select override (see A2a-SF Execution pause rule).
 
-**PFID handling on the fast path:** Do not run any PFID discovery queries. The catalog chain (Layer 1→2→3) provides everything the EP engineer needs. In the Quick Reference output, replace the PFID row with:
+**PFID handling on the fast path:** Do not run Step A1 PFID discovery. Instead, run Step LS5b (see below) — a targeted lookup using the confirmed curated offer slug and ITC. LS5b results populate the PFID row in Quick Reference output.
+
+---
+
+### Step LS5 — Catalog chain (fast path — replaces individual MCP calls)
+
+**Immediately after LS3/LS4 returns the confirmed curated offer ID(s), before any catalog reasoning begins,** run `catalog_chain.py` with all IDs returned by the scraper (post tier-filter):
+
+```bash
+python3 scrapers/catalog_chain.py <id1> [<id2> ...]
 ```
-PFIDs            : not queried on fast path — run /pricing-ticket {ITC} if a pricing ticket is needed
+
+Pass every curated offer ID from the live-surface result. The script runs all catalog lookups in parallel (one MCP session per ID) and returns a single JSON object (one ID) or a JSON array (multiple IDs).
+
+**Use the JSON output as the sole source of catalog data for all fast-path reasoning.**
+
+**HARD STOP — no individual catalog MCP calls on the fast path.** If you are about to call `get_curated_offer`, `get_offer_collection_definition`, or `get_offer_definition_by_id` while `LIVE_SURFACE_FAST_PATH = true`: stop immediately. Do not make the call. The only permitted catalog action between LS4 and the output step is running `catalog_chain.py` **exactly once**. Do not re-run it after LS5b completes. Making individual MCP calls in addition to `catalog_chain.py` is the primary source of fast-path latency regressions — it doubles all catalog work.
+
+**Scope note:** This restriction applies to direct MCP tool calls made by the model via the Tool Use interface. It does NOT apply to HTTP calls made internally by `catalog_chain.py` — the script's own requests are not subject to this restriction and will proceed normally.
+
+**Reading the output:**
+
+| Field | How to use it |
+|---|---|
+| `geometry` | `"collection"` → Offer Collection; `"standalone"` → Standalone Offer. Use this to determine output format — do not re-derive from other fields. |
+| `offerId` | The Layer 2 UUID. For Collection geometry: same value as `offerCollectionId` — use as `Offer Collection ID` in output. For Standalone geometry: use as `Offer ID` in output (`offerCollectionId` is null for standalones). |
+| `offerCollectionId` | The Offer Collection ID (Collection geometry only). Null for Standalones — do not use as Offer ID on standalones; use `offerId` instead. |
+| `collectionMembers` | **Complete component list for Quick Reference output.** Use this for all component rows — it includes non-provisioned components (e.g. SSL zero-priced via PRICE\_OVERRIDE=0) absent from `prePurchaseKeyMap`. If empty on a `geometry = "collection"` offer, the offer may be apiVersion 3 (component UUIDs not resolvable via V2 endpoint) — fall back to individual MCP tool calls for this offer. **Name null fallback:** if a member's `name` is null, use the first entry in its `tags[]` array as the label (e.g. `"sslcert"`). If both `name` and `tags[]` are null or empty, label it `[UUID: {offerId}]`. Never emit a blank component row. |
+| `prePurchaseKeyMap.componentIds` | Provisioning-relevant component IDs only (those with FREEACCOUNT flags, quantity overrides, etc.). NOT the complete component list — use `collectionMembers` for output. |
+| `prePurchaseKeyMap.components[].plan` | Per-component plan selected by this curated offer. If non-null: append `/ plan: {value}` to the component line. If null: omit the plan entirely — do not write "NOT SPECIFIED" or any placeholder. |
+| `prePurchaseKeyMap.components[].tags` | Tags array. Check for `m365` tag — if present, apply the M365 geo-availability flag. |
+| `plan` | Top-level curated offer plan (collection-level plan). Authoritative for the collection wrapper. |
+| `active` | If `false`: flag as `Active : No ⚠️ — confirm before cloning` in output. |
+| `error: "not_found"` | The ID was not found in the catalog. Treat as a ghost ID — do not emit an offer block for it; flag it in the Flags table. |
+
+**If `catalog_chain.py` is unavailable** (script not found, network error, non-zero exit): fall back to the individual MCP tool calls (`get_curated_offer`, `get_offer_collection_definition`, `get_offer_definition_by_id`) and note the fallback in output.
+
+This step applies to the fast path (LS1–LS4) only. Steps A2a, A2b, A2c, and the Modify path continue to use individual MCP tool calls as documented below.
+
+---
+
+### Step LS5b — PFID lookup (fast path — uses confirmed slug)
+
+Run this in parallel with `catalog_chain.py` — both depend only on the LS4 confirmed slug and ITC, not on each other.
+
+```sql
+SELECT DISTINCT
+    o.pf\_id,
+    o.product\_name
+FROM pricing\_experiment\_dev.offer\_pulse\_experiment o
+WHERE o.package\_id = '{champion\_slug}'
+  AND o.item\_tracking\_code = '{ITC}'
+  -- Add the next line only when D5 (term) was specified at intake:
+  -- AND o.product\_term\_num = {N} AND o.product\_term\_unit\_desc = '{unit}'
+ORDER BY o.pf\_id;
 ```
+
+**Term filter rule:** When D5 (term) was resolved at intake (e.g. "1 year", "3 years"), add `AND o.product_term_num = {N} AND o.product_term_unit_desc = '{unit}'` to the WHERE clause before `ORDER BY`. This prevents rows for other term variants (e.g. returning 1-year, 2-year, and 3-year PFIDs when the analyst specified only 3-year). When no term was specified, omit the filter — return all term variants and note them in the PFID table.
+
+**Unit value format:** `product_term_unit_desc` stores lowercase values — use `'year'` not `'YEAR'`, and `'month'` not `'MONTH'`. Applying uppercase will return 0 rows.
+
+Use `connection='bi'`. If rows are returned: render as a two-column table in Quick Reference output — `pf_id` and `product_name`. The `product_name` column distinguishes the primary product PFID from free component PFIDs (M365, SSL, Norton etc.) — the engineer reads it to identify which PFID to target.
+
+**If zero rows on the exact slug:** The slug may be newer than billing history. Run a fallback query using tier and email-variant markers extracted from the champion slug:
+
+- Extract tier: 'basic', 'deluxe', 'ultimate', 'economy', or 'pro' — whichever appears in the slug
+- Extract email variant: 'o365' if slug contains 'o365'; 'openexchange' if it contains 'openexchange'; omit email filter if neither
+
+**Non-billing tokens (do NOT add as LIKE filters):** The following tokens appear in slug names but are NOT stored in billing column values — applying LIKE filters for them returns 0 rows: `forever`, `ssl`, `wss`, `xtra`, `norenew`, `freetrial`, `atmp`, `disc`, any numeric-sequence token (e.g. `set-1`, `set-2`). Apply LIKE filters ONLY for the tier keyword and email variant keyword listed above.
+
+```sql
+SELECT DISTINCT
+    o.pf\_id,
+    o.product\_name,
+    o.package\_id
+FROM pricing\_experiment\_dev.offer\_pulse\_experiment o
+WHERE o.item\_tracking\_code = '{ITC}'
+  AND o.package\_id IS NOT NULL
+  AND LOWER(o.package\_id) LIKE '%{tier}%'
+  AND LOWER(o.package\_id) LIKE '%{email\_variant}%'
+  -- Add the next line only when D5 (term) was specified at intake:
+  -- AND o.product\_term\_num = {N} AND o.product\_term\_unit\_desc = '{unit\_lowercase}'
+ORDER BY o.pf\_id;
+```
+
+Apply the same term filter rule here as for the exact-slug query: when D5 was specified, add the term filter (lowercase unit). This ensures the fallback also returns only the primary product PFID at the requested term, not free add-on PFIDs at mismatched terms (e.g. M365 1-year entry when analyst requested 3-year hosting).
+
+If fallback rows are returned: render the same two-column table (`pf_id`, `product_name`) and add a note: `PFIDs sourced from sibling slug {package_id} — same offer family, {champion_slug} not yet in billing history`.
+
+If still zero rows after the fallback: this is a **WARNING, not BLOCKING**. The slug may be pre-launch or newly deployed. Do not set BLOCKING. In the PFID section of Quick Reference output, emit:
+
+```
+PFID Data        : Not found in billing data — offer may be pre-launch or newly deployed.
+                   Catalog-derived components: {collectionMembers[].name values from catalog_chain.py output, comma-separated}
+                   These are catalog product names, not PFIDs. Provide to engineering as component reference.
+```
+
+Do not fire a BLOCKING flag or halt output for absent billing data. Catalog component names are sufficient for engineering to identify the product structure.
+
+**Fast-path output sequence (assemble after LS5 and LS5b both complete):** (1) Route Lock (from LS4); (2) Quick Reference block; (3) Flags table (if any). Do not emit the Catalog Family table (Step D) on the fast path — slug family expansion is skipped at the A2a-SF trigger gate.
+
+**FAST PATH FENCE — mandatory.** After LS5 and LS5b both complete, the fast path is done collecting data. Proceed immediately to output assembly — no additional steps are permitted before rendering output. Specifically prohibited before output: tribal knowledge search (`knowledge-log.md`), catalog re-verification, any additional grep, Explore agent calls, file reads, or shell commands. `catalog_chain.py` runs exactly once per fast path execution (triggered in LS5). The next action after LS5b results are collected is assembling the Quick Reference output.
 
 ---
 
@@ -813,7 +928,7 @@ If PFIDs are active on both surface types:
 
 If PFIDs are active on NES surfaces only, or CES surfaces only, proceed with the single-path routing as normal.
 
-* **Discounted slug detection (mandatory):** Inspect every non-null `package\_id` slug for discount-variant indicators: a `-disc` suffix, a `-discount-` substring, or an embedded discount-code pattern (8+ uppercase alphanumeric characters, e.g. `-365AF1F1CB`, `-disc444888`). If a slug matches any of these patterns, flag it as a discounted variant. Then: (a) emit a `Discounted variant` flag in the Flags table (see format below), (b) attempt `get\_curated\_offer` on the de-discounted slug (remove the `-disc` suffix or discount-code substring, e.g. `wsb-vnext-tier3-disc` → `wsb-vnext-tier3`) and record both the discounted and base versions, (c) in the Quick Reference, set the champion to the **base slug** (not the discounted variant) and note the discounted variant in the Champion line: `{base\_slug} (base — use for new experiments; discounted variant {disc\_slug} also active on surface)`. Engineering clones the base tier for new experiments; the discounted variant is the current live offer only. If the de-discounted lookup fails (slug not in catalog), keep the discounted slug as champion but add a BLOCKING note: "Base slug lookup failed — confirm clone source with ecomm."
+* **Discounted slug detection (mandatory — when `LIVE_SURFACE_FAST_PATH = false` only):** When `LIVE_SURFACE_FAST_PATH = true`: skip this detection — the champion slug is sourced from the live page scrape and Step A2 is not run on the fast path. When `LIVE_SURFACE_FAST_PATH = false`: inspect every non-null `package\_id` slug for discount-variant indicators: a `-disc` suffix, a `-discount-` substring, or an embedded discount-code pattern (8+ uppercase alphanumeric characters, e.g. `-365AF1F1CB`, `-disc444888`). If a slug matches any of these patterns, flag it as a discounted variant. Then: (a) emit a `Discounted variant` flag in the Flags table (see format below), (b) attempt `get\_curated\_offer` on the de-discounted slug (remove the `-disc` suffix or discount-code substring, e.g. `wsb-vnext-tier3-disc` → `wsb-vnext-tier3`) and record both the discounted and base versions, (c) in the Quick Reference, set the champion to the **base slug** (not the discounted variant) and note the discounted variant in the Champion line: `{base\_slug} (base — use for new experiments; discounted variant {disc\_slug} also active on surface)`. Engineering clones the base tier for new experiments; the discounted variant is the current live offer only. If the de-discounted lookup fails (slug not in catalog), keep the discounted slug as champion but add a BLOCKING note: "Base slug lookup failed — confirm clone source with ecomm."
 
 **Branch decision after Step A2:**
 
@@ -827,17 +942,19 @@ A mixed surface (NES > 0% but < 100%) follows the NES path (Step A2a). The CES p
 
 **Route Lock (required immediately after the branch decision):** Once the NES/CES determination is made, commit to one sub-route and emit this single line before making any catalog or merchandising calls:
 
-* NES path selected → `ROUTE: NES Curated Offer  —  {ITC}{if surface\_label resolved: " (" + surface\_label + ")"}`
-* CES path selected → `ROUTE: CES Package  —  {ITC}{if surface\_label resolved: " (" + surface\_label + ")"}{if surface\_nes\_ces is CES or CES-dominant: " is a known CES-dominant surface"}  |  INFERRED PATH — no billing package\_id; champion derived from merchandising API, ID scan, or tag search (see Resolution Confidence)`
+* NES path selected → `ROUTE: NES Curated Offer  —  {ITC}{if surface\_label resolved: " (" + surface\_label + ")"}` + `       {prod URL from live-surface ITC mapping table, if ITC is in the table — omit line if not found}`
+* CES path selected → `ROUTE: CES Package  —  {ITC}{if surface\_label resolved: " (" + surface\_label + ")"}{if surface\_nes\_ces is CES or CES-dominant: " is a known CES-dominant surface"}  |  INFERRED PATH — no billing package\_id; champion derived from merchandising API, ID scan, or tag search (see Resolution Confidence)` + `       {prod URL from live-surface ITC mapping table, if ITC is in the table — omit line if not found}`
 
 Examples:
 
 * `ROUTE: NES Curated Offer  —  slp\_wordpress (WordPress Sales Landing Page)`
+  `       https://www.godaddy.com/hosting/wordpress-hosting`
 * `ROUTE: CES Package  —  dpp\_precheck (Domain Purchase Path — Pre-Check) is a known CES-dominant surface`
+  `       (no mapped URL — dpp\_precheck is not in the live-surface scrape table)`
 
 This label must carry through all remaining steps and appear as the `Offer Route` field in every Quick Reference block. Do not switch routes mid-execution without a new disclosure line explaining why (e.g. pre-launch NES check changed the outcome).
 
-**Migration status advisory (soft hint):** NES/CES routing is based on live billing data (last 7 days). If NES coverage = 0% but the surface vocabulary lists the surface as `CES (NES in progress)`, migration may be in progress but incomplete in the data window. Run `/migration-check` to confirm the current live NES% before treating the surface as CES-only.
+**Migration status advisory (soft hint):** NES/CES routing is based on live billing data (last 7 days). If NES coverage = 0% but the surface vocabulary lists the surface as `CES (NES in progress)`, migration may be in progress but incomplete in the data window. Verify by running: `SELECT COUNT(*) as nes_cnt FROM pricing_experiment_dev.offer_pulse_experiment WHERE item_tracking_code = '{ITC}' AND package_id IS NOT NULL` — if nes_cnt > 0, NES data exists for this surface and migration may be underway.
 
 **Vocab advisory (soft hint — fires only when NES coverage = 0% AND surface\_nes\_ces resolved):**
 
@@ -866,7 +983,7 @@ Certain surfaces are confirmed CES-only — NES catalog entries may exist for th
 |Surface ITC pattern|Status|Notes|
 |-|-|-|
 |`ssl-config`|CES-only|SSL configuration surface; CES-only by design|
-|`slp\_wsb\_\*`|CES-only (verify)|WAM/WSB Sales Landing Pages; NES migration status uncertain — live-surface scrape (2026-05-28) found NES offers on `slp\_wsb\_ft\_getstarted\_plans\_nocc` (`wsb-vnext-tier1` etc.) but billing NES% for these ITCs is unconfirmed. Run `/migration-check slp\_wsb\_ft\_getstarted\_plans\_nocc` before treating as CES-only. If billing confirms NES > 0%, remove from this registry.|
+|`slp\_wsb\_\*`|CES-only (verify)|WAM/WSB Sales Landing Pages; NES migration status uncertain — live-surface scrape (2026-05-28) found NES offers on `slp\_wsb\_ft\_getstarted\_plans\_nocc` (`wsb-vnext-tier1` etc.) but billing NES% for these ITCs is unconfirmed. Verify via: `SELECT COUNT(*) as nes_cnt FROM pricing_experiment_dev.offer_pulse_experiment WHERE item_tracking_code LIKE 'slp\_wsb\_%' ESCAPE '\' AND package_id IS NOT NULL LIMIT 10` before treating as CES-only. If billing confirms NES > 0%, remove from this registry.|
 |`dpp\_precheck`|Mixed|Email essentials NES offers ARE live (temp-email-essentials-99 and temp-email-essentials-149 confirmed active). CES-dominant for non-email products — for non-email product queries at this surface, skip pre-launch NES check.|
 |`upp\_\*`|CES-only|Upsell Purchase Path; not on NES migration roadmap|
 
@@ -907,7 +1024,9 @@ Do not emit a "no results" or "zero billing rows" error when the pre-launch chec
 
 ### Surface Context Check (Tribal Knowledge)
 
-*Fires after all Route Lock and path-disclosure blocks, before any catalog or merchandising chain steps begin. Applies on both NES and CES paths.*
+*Fires after all Route Lock and path-disclosure blocks, before any catalog or merchandising chain steps begin. Applies on NES and CES paths.*
+
+*Exception: when `LIVE_SURFACE_FAST_PATH = true`: skip this step entirely. Do not read `knowledge-log.md`.*
 
 **Purpose:** Surface any tribal knowledge entries containing verified facts, quirks, or warnings specifically about this surface or the products being queried. TK entries document things that are permanently true and not derivable from data alone — product mix facts, migration ceilings, wrong assumptions to avoid, ghost ID behavior.
 
@@ -997,6 +1116,7 @@ Before calling `get\_curated\_offer` on any `package\_id` value from Step A2, cl
 
 |Trigger condition|Action|
 |-|-|
+|`LIVE_SURFACE_FAST_PATH = true` AND LS3 confidence ≥90%|Short-circuit: skip Steps A–E entirely. Proceed directly to Step F using the live-surface-confirmed slug as the selected clone source. In **Supporting Detail mode only**, emit: `Slug family scan skipped (fast path, ≥90% confidence). To see all sibling offers in the {prefix}* family, run /live-surface {ITC} standalone and inspect A2a-SF with billing as anchor.` Do NOT call `get_curated_offers`. In Quick Reference mode (default), omit this disclosure line.|
 |One or more billing-confirmed slugs survived the Pre-classification filter|Run slug family expansion for each surviving slug. Standard path.|
 |GAP-042 surface (NES% > 0% in surface vocab OR confirmed NES surface, but `pf\_id\_package\_details\_v1` returned zero rows for target PFID on this ITC)|Run slug family expansion as the **PRIMARY** discovery path. Billing pre-flight is structurally blind here. State: `GAP-042 ACTIVE: slug family expansion is primary — billing pipeline cannot surface NES rows for this ITC/PFID combination.`|
 |Zero billing-confirmed slugs AND surface is not in GAP-042 condition|Skip this step.|
@@ -1065,6 +1185,8 @@ Record the family member count as `{F}`. All `{F}` members must be presented —
 
 **C. Component Structure Retrieval**
 
+**When `LIVE_SURFACE_FAST_PATH = true`:** skip this step entirely. The confirmed clone source is already known from Step LS4, and its component structure is sourced from `catalog_chain.py` output (Step LS5) — do not make `get_curated_offer` or `get_offer_collection_definition` calls for family members here.
+
 For each of the `{F}` family members, call in parallel:
 
 ```
@@ -1098,7 +1220,9 @@ From the `get\_offer\_collection\_definition` response, use the `offers\[]` arra
 
 **D. Family Table Output**
 
-Render immediately before the `For every distinct non-null package\_id` block. Part of default Quick Reference output — do not suppress.
+**When `LIVE_SURFACE_FAST_PATH = true`:** suppress Step D entirely — the A2a-SF trigger table short-circuits Steps A–E on the fast path, so there is no Family Table to render.
+
+**When `LIVE_SURFACE_FAST_PATH = false`:** render immediately before the `For every distinct non-null package\_id` block. Part of default Quick Reference output — do not suppress.
 
 ```
 CATALOG FAMILY — {prefix}\* ({F} members found across {N\_anchor} anchor slug(s))
@@ -1122,7 +1246,9 @@ One row per family member. All `{F}` rows must appear. Never suppress a row.
 
 **E. Analyst Selection Instruction**
 
-Always emit after the Catalog Family table:
+**When `LIVE_SURFACE_FAST_PATH = true`:** suppress this entire block — the fast-path override at the end of this step auto-selects without analyst input.
+
+**When `LIVE_SURFACE_FAST_PATH = false`:** emit after the Catalog Family table:
 
 ```
 ANALYST ACTION REQUIRED — Select Clone Source
@@ -1252,6 +1378,8 @@ Never omit a component. If `prePurchaseKeyMap.offers\[]` has 3 entries, make 3 c
 * **`offers\[]`** (from `get\_offer\_collection\_definition`) — all offers in the collection, including the primary product (labeled `parentOffer` in `offersGrouping`) and any optional add-ons not bundled at checkout (e.g. Norton, upsell seats).
 
 For any `offerId` in `offers\[]` that does NOT appear in `prePurchaseKeyMap.offers\[]`: look it up with `get\_offer\_definition\_by\_id` in the same parallel batch and include it in a separate table labeled **"Additional Offers in Collection (not wired in prePurchaseKeyMap)"**. These are not required for ecomm to clone the bundle, but they must not be silently dropped.
+
+**Fast-path exception:** When `LIVE_SURFACE_FAST_PATH = true`, skip this step entirely. The `collectionMembers` array returned by `catalog_chain.py` already contains the complete member list (including non-provisioned components such as SSL). Use `collectionMembers` for all component rows — no secondary "Additional Offers in Collection" table is generated on the fast path.
 
 Never infer which `offers\[]` entries are "unimportant" without looking them up.
 
@@ -1891,8 +2019,7 @@ Offer Collection ID         :  Not available
 \[IF OFFER COLLECTION — prePurchaseKeyMap.offers\[] has entries:]
 Offer Collection ID         :  {offerId} from get\_curated\_offer (this is also the Base Offer ID for the primary product)
 Collection Plan             :  {plan} from get\_curated\_offer top-level field (collection-level plan for cloning operations)
-Component 1 — {Name}        :  {offerId} / plan: {plan from prePurchaseKeyMap entry — or "NOT SPECIFIED — component inherits collection plan (see Collection Plan above)"}
-Component 2 — {Name}        :  {offerId} / plan: {plan from prePurchaseKeyMap entry — or "NOT SPECIFIED — component inherits collection plan (see Collection Plan above)"}
+Component ({Name})           :  {offerId}{— if plan non-null: " / plan: {plan value}"; if null: nothing}
 \*(one line per component in prePurchaseKeyMap.offers\[])\*
 
 \[IF NEITHER ID PRESENT — catalog unresolvable:]
@@ -1914,6 +2041,7 @@ Discount (catalog)          :  {discountCodes\[] from get\_curated\_offer respon
 Discount (from ticket)      :  {discount code extracted from Jira ticket body or linked PRICING ticket — omit line if entry was not a Jira ticket or no code was stated; if a PRICING ticket was referenced, note it: "{code} (see {PRICING-XXXXX})"}
 Customer Segment            :  New / existing / both
 Offer Lever                 :  {value from Jira Classification field, analyst entry, or "Not specified"}
+A/B Test                    :  {Yes — {bucketing\_type} bucketing ({surface\_class}) | No | Not specified} — emit only when analyst intake explicitly stated an A/B or multivariate test context; omit this line entirely when no experiment context was given
 Volume                      :  {N} orders/7d on {itc} ({NES\_pct}% NES)
 BLOCKING                    :  One sentence. Omit this line entirely if nothing blocks ecomm from proceeding.
 ```
@@ -1927,11 +2055,6 @@ BLOCKING                    :  One sentence. Omit this line entirely if nothing 
 * Ghost / unresolvable: emit `Offer Collection ID : Not resolvable — catalog returned no offerId`.
 
   This constraint applies equally to NES Quick Reference blocks (Step A2a), CES Quick Reference blocks (Steps A2b/A2c), Modify output blocks (Step M output), and Supporting Detail blocks. No geometry or path is exempt.
-
-* For a **Standalone Offer**: the label is `Offer ID` (not "Base Collection ID" or "Offer Collection ID"). Emit the `Plan` line immediately after it — the plan from `get\_offer\_collection\_definition` is authoritative and must be shown. Do not emit any Component lines. Always emit `Offer Collection ID : Not available` — the field must appear so the analyst can see it was looked for and not found. Do not omit it entirely; do not write "N/A".
-* For an **Offer Collection**: the label is `Offer Collection ID`. This is the same UUID as `offerId` from `get\_curated\_offer`, but the label signals to engineering that they are looking at a collection, not a standalone. Emit one Component line per `prePurchaseKeyMap.offers\[]` entry. Do not emit a `Plan` line at the top level — plans are per-component.
-* If **both an `offerId` and a `prePurchaseKeyMap` structure** are present (expected for all collections): show `Offer Collection ID` (same value as offerId) plus all component lines. No separate "Base Offer ID" label is needed unless the ticket context requires distinguishing the primary product offer from the collection wrapper — if that detail is needed, add a `Primary Product Offer ID` line immediately under `Offer Collection ID`.
-* If **neither** is present: the BLOCKING line is the only ID field. Do not leave placeholder fields.
 
   **Champion value by path:**
 
@@ -1972,15 +2095,19 @@ Source to Clone             :  {base\_slug} (base — use this as the clone sour
 
   Where `{expected\_N}` = distinct components from `prePurchaseKeyMap.offers\[]` + free component checkpoint + any CES addons. If `N = expected\_N`: write "All {N} PFIDs resolved." If `N < expected\_N`: write "{N} of {expected\_N} resolved — {unresolved\_count} unresolved: {list product names}. BLOCKING — incomplete PFID list. Resolve before filing." This annotation is mandatory on every run — never omit it even when the list appears complete. A BLOCKING annotation fires whenever N < expected\_N regardless of how small the gap is.
 
+  **Fast-path override (when `LIVE_SURFACE_FAST_PATH = true`):** expected\_N = billing-observable primary product PFIDs only. Free add-on components (M365, Norton, SSL, Titan Email — identifiable via KNOWN\_COMPONENTS tags or `FREEACCOUNT` in catalog) are excluded from expected\_N because they carry zero billing revenue and will never appear in LS5b results by design. If LS5b returned at least 1 billing-confirmed PFID for the primary product: write "All billing-observable PFIDs resolved. Free components ({comma-separated component names}) are not present in billing — their Component Offer IDs are in the payload above." Do NOT fire BLOCKING for absent free-component PFIDs on the fast path.
+
+  **If LS5b returned 0 rows (exact query AND fallback both returned 0):** do not compute a completeness annotation. Do NOT write '0 of 1' or any numeric completeness annotation — expected_N is indeterminate when no billing data exists. Instead emit `PFID Data : Not found in billing data — offer may be pre-launch or newly deployed.` and proceed without a BLOCKING flag.
+
 * **Term:** always populated. If a specific term was requested, write exactly that value (e.g. "1 Year"). If all terms were requested or no filter was applied, list every distinct `product\_term\_num` + `product\_term\_unit\_desc` combination observed for this bundle on this surface (e.g. "1 Year, 2 Year, 3 Year"). When multiple terms appear and no filter was applied, add a note: "All terms shown — confirm scope with analyst before filing." Do not aggregate or hide any observed term.
 * **BPO / Trial:** sourced from the `get\_curated\_offer` response. Omit this line entirely if the field is absent in the response — do not write "N/A" or "None".
 * **Cart Renewal Behavior:** sourced from the `get\_curated\_offer` response. Same rule — omit if not present.
 * **Discount:** always reflects billing data, not what the request says. See format rules above. When entry was a Jira ticket and a `Discount (from ticket)` was extracted (e.g. "DISCWAMBA", "365AF1F1CB from PRICING-15500"), add a second `Discount (from ticket)` line immediately after the `Discount (catalog)` line. If a PRICING ticket was referenced in the Jira body, note it: `Discount (from ticket) : {code} (see {PRICING-XXXXX})`. These three Discount lines are separate — billing shows what exists today; catalog shows what is embedded in the curated offer definition; ticket shows what is being applied by this experiment.
-* **Discount (catalog):** sourced from `discountCodes[]` on the `get_curated_offer` response. This field is present on NES path when `get_curated_offer` is called (Steps A2a and A2c Chain Steps 1–2). On the CES path, it is available when the champion was resolved via `get_curated_offer` (Chain Step 1 or 2 success); it is unavailable when Chain Step 3 (tag search only) ran without a `get_curated_offer` call. Omit this line entirely if `discountCodes` is absent or an empty array — do not write "None". Write comma-separated codes verbatim if multiple codes are present. This is distinct from billing-derived `Discount` and ticket-supplied `Discount (from ticket)`.
+* **Discount (catalog):** sourced from `discountCodes[]`. On the fast path: read from `catalog_chain.py` JSON output `discountCodes` field. On the NES non-fast path: from `get_curated_offer` response (Steps A2a and A2c Chain Steps 1–2). On the CES path: available when champion was resolved via `get_curated_offer`; unavailable when Chain Step 3 (tag search only) ran without a `get_curated_offer` call. Omit this line entirely if `discountCodes` is absent or an empty array — do not write "None". Write comma-separated codes verbatim if multiple codes are present. This is distinct from billing-derived `Discount` and ticket-supplied `Discount (from ticket)`.
 * One Component line per entry in `prePurchaseKeyMap.offers\[]`. Use the component's `name` from `get\_offer\_definition\_by\_id` as the label. Never omit a component. **Exception: Modify — Add Component requests.** When Offer Operation = Modify, do not list existing unchanged components in any output block or ticket preview. The "never omit a component" rule applies to Create/Clone paths only. The Modify output shows only what is being added.
-* For Standalone Offers: label the ID field `Offer ID` (not `Offer Collection ID`). Emit the `Plan` line immediately after, using the plan from `get\_offer\_collection\_definition` — it is authoritative for standalones. Omit all Component lines. Always emit `Offer Collection ID : Not available` — the field must appear so the analyst can confirm it was looked for and not found.
+* For Standalone Offers: label the ID field `Offer ID` (not `Offer Collection ID` or `Base Collection ID`). Emit the `Plan` line immediately after, using the plan from `get\_offer\_collection\_definition` — it is authoritative for standalones. Omit all Component lines. Always emit `Offer Collection ID : Not available` — the field must appear so the analyst can confirm it was looked for and not found. Do not write "N/A".
 * For Offer Collections: label the ID field `Offer Collection ID`. Emit a `Collection Plan` line immediately after it using the top-level `plan` from `get\_curated\_offer` — this is the collection-level plan engineers use for cloning operations. Do not omit this line. Do not emit a standalone `Plan` line — that label is reserved for Standalone geometry. Emit one Component line per `prePurchaseKeyMap.offers\[]` entry.
-* If a component's `plan` is absent from the `prePurchaseKeyMap` entry: write `NOT SPECIFIED — component inherits collection plan (see Collection Plan above)`. Do not add a BLOCKING line for this case — the absence of a per-component plan does not block ecomm when the collection-level plan is present. Only escalate to BLOCKING if the collection-level plan is also absent (i.e. `collection\_plan` was not returned by `get\_curated\_offer`).
+* If a component's `plan` is absent from the `prePurchaseKeyMap` entry: omit the plan entirely — do not write 'NOT SPECIFIED' or any placeholder. Do not add a BLOCKING line for this case — the absence of a per-component plan does not block ecomm when the collection-level plan is present. Only escalate to BLOCKING if the collection-level plan is also absent (i.e. `collection\_plan` was not returned by `get\_curated\_offer`).
 * If a component lookup failed: write `{raw offerId} — lookup failed, verify manually`.
 * Never add placeholder lines for fields with no data. Omit the line.
 * No prose before or after the Quick Reference blocks — except the champion ambiguity disclosure above and the required CES disclosure sections when the CES path ran.
@@ -1994,12 +2121,14 @@ Source to Clone             :  {base\_slug} (base — use this as the clone sour
 |A/B test likely|{N} bundles active on `{itc}` simultaneously — confirm champion with ecomm before cloning|
 |nes- prefix detected|Billing data returned `{nes-slug}` (nes- prefix). Catalog called with raw slug → NOT FOUND. Retried with clean slug `{clean-slug}` → {FOUND — used as curated offer ID / NOT FOUND — classified as ghost}.|
 |Discounted variant|`{disc\_slug}` appears to be a discounted configuration (slug contains `-disc` / `-discount-` / embedded discount code). Base slug: `{base\_slug}`. Clone the base slug for new experiments — do not clone the discounted variant unless the intent is to reproduce the existing discounted configuration.|
-|M365 geo risk|Component `{name}` has `m365` tag — M365 is not available in all markets. Before cloning: (1) confirm M365 availability for `{market}` via the Microsoft partner portal or ecomm catalog team, (2) if M365 is unavailable, identify an alternative email component (Titan, open exchange) — the ticket is BLOCKED until a valid email component is confirmed for the target market.|
+|M365 geo risk|Component `{name}` has `m365` tag — M365 is not available in all markets. **Exception: when D3 confirmed US-only market, emit instead:** `M365 component present — confirmed available for US market; no geo restriction.` For all other markets: Before cloning: (1) confirm M365 availability for `{market}` via the Microsoft partner portal or ecomm catalog team, (2) if M365 is unavailable, identify an alternative email component (Titan, open exchange) — the ticket is BLOCKED until a valid email component is confirmed for the target market.|
+|M365 quantity override|When `quantityByOfferKey` is non-null in `catalog_chain.py` JSON output: include this value verbatim in the engineering ticket payload regardless of slug name. o365 MWP bundles are the known case (e.g. `{"a581f39b-867b-3b80-b084-aa82e50287aa": 3}` = 3 M365 seats — TK-031), but any non-null value must carry forward. `quantityByOfferKey` lives on the curated offer layer — NOT the base Offer Collection. Omitting it silently under-provisions the quantity; invisible in billing, surfaces only via provisioning audit.|
 |CES surface gap|`{itc}` (`{N}` orders/7d) has no `package\_id` — these orders are CES and not covered by the NES champion|
 |Discount code conflict|`{itc}` has existing code `{code}` that would be overridden|
 |Plan not specified|Component `{name}` has no plan in `prePurchaseKeyMap` — ecomm must confirm|
 |Multiple terms (unfiltered)|Bundle `{slug}` observed with {N} distinct term lengths on this surface ({term\_list}). No term filter was applied — output is cross-term. Analyst must confirm which term(s) the new offer should cover before filing.|
 |SLP-DLP funnel expansion applied|NES events for `{entry\_itc}` queried across both entry ITC and configure-page ITC (`{configure\_page\_itc}`). If `{configure\_page\_itc}` returns zero NES rows in `offer\_pulse\_experiment`, GAP-042 applies — NES package slugs recovered via direct traffic event fallback; labeled accordingly.|
+|Component billing override|Component `{name}` has a `configKeyValues` billing policy override (`{type}`, `{term}`; outcome: `{freeTrialOutcome}`). Cloned offer will inherit this configuration. Verify with ecomm whether the billing override is intentional for the discounted variant.|
 
 *(Show only rows that apply. Do not show example rows. Omit the table entirely if nothing flags.)*
 
@@ -2098,19 +2227,10 @@ Then render catalog details as a labeled record block:
 Champion (clone from this)  :  {package\_id} from billing — the curated offer currently live on this surface
                                (source: billing data)
 
-{Geometry-aware ID fields — same rule as Quick Reference:}
-
-\[IF STANDALONE:]
-Offer ID                    :  {offerId}
-Plan                        :  {plan from get\_offer\_collection\_definition}
-Offer Collection ID         :  Not available
-{If the UNEXPECTED block fired for this bundle, insert it here.}
-
-\[IF OFFER COLLECTION:]
-Offer Collection ID         :  {offerId}
-
-\[IF NEITHER:]
-BLOCKING                    :  Catalog response contained no offerId — Offer ID and Offer Collection ID both unknown.
+{Geometry-aware ID fields — same rule as Quick Reference:
+  Standalone: Offer ID : {offerId} / Plan : {plan} / Offer Collection ID : Not available. Insert UNEXPECTED block here if it fired.
+  Collection: Offer Collection ID : {offerId}
+  Neither: BLOCKING : Catalog response contained no offerId — Offer ID and Offer Collection ID both unknown.}
 
 {Remaining fields always present:}
 Collection Name             :  {name} from get\_offer\_collection\_definition
@@ -2125,7 +2245,7 @@ Then, for Offer Collections only, the component table:
 
 |Component Offer ID|Name|Plan Wired in Bundle|Tags|Notes|
 |-|-|-|-|-|
-|`{offerId}` from `prePurchaseKeyMap` entry|`{name}` from `get\_offer\_definition\_by\_id`|`{plan}` from `prePurchaseKeyMap` entry — never from `get\_offer\_definition\_by\_id`. If absent: **NOT SPECIFIED**|All tags from API|geo flags; autoRenew if present|
+|`{offerId}` from `prePurchaseKeyMap` entry|`{name}` from `get\_offer\_definition\_by\_id`|`{plan}` from `prePurchaseKeyMap` entry — never from `get\_offer\_definition\_by\_id`. If absent: omit this cell (leave blank) — do not write 'NOT SPECIFIED'|All tags from API|geo flags; autoRenew if present|
 
 One row per `prePurchaseKeyMap.offers\[]` entry. Never omit.
 
@@ -2217,8 +2337,6 @@ Use the root keyword from the product name. For "MWP Basic" use `basic`; for "We
 
 If the combined query returns zero rows or only clearly wrong products, stop and ask: "I found no matches for '{keyword}' in product\_name or product\_pnl\_subline\_name. Please provide a PFID or the exact `product\_pnl\_subline\_name` value."
 
-If the analyst specified a customer segment, **do NOT add a segment HAVING clause here** — B0 discovers all PFIDs across all segments (see HARD CONSTRAINT above). Note the segment for use in Step A1 only. Carry `WHERE existing\_customer\_orders > 0` or `WHERE new\_customer\_orders > 0` into A1 — never into B0.
-
 **HARD STOP — always present the B0 PFID list and wait for explicit analyst confirmation before proceeding to A1.** Do not auto-proceed even if the list looks clean. This confirmation catches wrong-product matches (unexpected tier inclusions, legacy renewal PFIDs elevated by billing volume, or keyword collisions with adjacent products) before they contaminate the downstream PFID inventory.
 
 Present the B0 results as a collapsed PFID × Term table:
@@ -2297,7 +2415,7 @@ Wait for confirmation before running A1. Do not silently proceed with the origin
 
 ## Post-Output: Ticket Preview Prompt
 
-After all output is rendered (Quick Reference blocks, Flags, CES Terminal Payload — whichever apply), always append this prompt as the final line of your response:
+After all output is rendered (Quick Reference blocks, Flags, CES Terminal Payload — whichever apply), append this prompt as the final line of your response:
 
 > "Would you like to see a draft of what the **ecomm engineering ticket request** would look like? I'll format it for copy-paste — no ticket will be created."
 >
@@ -2306,7 +2424,7 @@ After all output is rendered (Quick Reference blocks, Flags, CES Terminal Payloa
 Ask both questions together in a single prompt. Wait for the analyst's response. Handle each independently — analyst may want one, both, or neither.
 
 - Ecomm ticket yes → render the appropriate Ticket Preview block below.
-- Pricing ticket yes → invoke `/pricing-ticket` with the already-resolved context: surface/ITC, PFID list, champion package_id (if NES), and current discount code from `discountCodes[]` (NES) or `item_discount_code` (CES). This skips B0 and the PFID discovery gate in pricing-ticket.
+- Pricing ticket yes → invoke `/pricing-ticket` with the already-resolved context. **Construct the argument as PFID-first:** lead with the numeric PFID(s) confirmed during the run (e.g. `PFID 1320706, slp_wordpress, 3yr, US, new customers, 20% discount`), followed by champion package_id (if NES), current discount code from `discountCodes[]` (NES) or `item_discount_code` (CES), term, market, and segment. Never pass a product name as the primary entry when the PFID is already confirmed — a product-name-first argument triggers pricing-ticket's Step B0 and re-runs PFID discovery that was already completed. PFID-first entry skips B0 per pricing-ticket's spec (`If the entry is ITC-first or PFID-first: skip B0, go directly to B1`).
 - If they say no or ignore either, do not render that preview.
 
 **HARD CONSTRAINT — READ ONLY:** The skill must never call `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue`, or any write-capable Atlassian tool as part of the ticket preview. This step is display-only. The analyst copies and files the ticket themselves. Violation of this constraint is a critical error.
@@ -2319,11 +2437,13 @@ Do not ask this question if:
 
 \---
 
+**Shared rules for all ticket preview formats:** Populate every field from the output already rendered — do not re-query or call additional catalog tools. If a field was not resolved (e.g. BLOCKING component plan), write that status verbatim. Summary line → Jira Summary field; description body → Jira Description field as plaintext or markdown. No prose before or after the block.
+
+---
+
 ### Ticket Preview — Path A (Curated Offer Creation)
 
 *Render when the analyst confirms they want a preview and Path A ran.*
-
-Populate every field from the Quick Reference output already rendered. Do not re-query or call additional catalog tools. If a field was not resolved (e.g. BLOCKING component plan), write that status in the preview field verbatim so the analyst knows to complete it before filing.
 
 ```
 === Ticket Preview: Curated Offer Creation Request ===
@@ -2412,15 +2532,11 @@ Notes on this table:
 * The `One Time Fee` and `Free Product` columns are derived from the free-component checkpoint and catalog `purchaseType` field. If uncertain, write "Confirm" rather than guessing.
 * If `Discount (from ticket)` was extracted in the Jira entry step, use that value in the Discount Code column — not the billing-derived `item\_discount\_code` which will be null for new experiments.
 
-**Format rule:** The summary line is designed for direct paste into the Jira Summary field. The description body is designed for the Jira Description field as plaintext or markdown. Do not add prose before or after the block.
-
 \---
 
 ### Ticket Preview — Path A (Modify — Add Component)
 
-*Render when the analyst confirms they want a preview, Path A ran, and Offer Operation = Modify — Add Component.*
-
-Populate every field from the Modify output already rendered. Do not re-query. Do not list existing unchanged components — this preview describes only the add operation.
+*Render when the analyst confirms they want a preview, Path A ran, and Offer Operation = Modify — Add Component. Do not list existing unchanged components — this preview describes only the add operation.*
 
 **One-step preview (new product's curated offer already exists):**
 
@@ -2494,8 +2610,6 @@ Populate every field from the Modify output already rendered. Do not re-query. D
   - \[ ] Step 2: New component added to prePurchaseKeyMap of all packages listed above
   - \[ ] Existing bundle behavior unchanged (no other components added or removed)
 ```
-
-**Format rule:** Same as Create/Clone — summary line for Jira Summary field, description body for Jira Description field. Do not add prose before or after the block.
 
 \---
 
@@ -2582,8 +2696,8 @@ If the ticket mentions multiple surfaces (e.g. "DPP and SLP"), run the audit que
 |One ITC → many package\_ids|SLP with A/B test running|Show all; ask analyst which is intended champion|
 |One package\_id → many PFIDs|Bundle includes hosting + SSL + email|Show all PFIDs; all need to be in the pricing ticket|
 |One PFID → many discount codes|Same PFID with different codes per ITC|Show all; don't pick the most common one|
-|Standalone Offer|Domain or SSL sold without add-ons|`prePurchaseKeyMap` absent or empty. Output field: `Offer ID` (the `offerId` from `get\_curated\_offer`). One `get\_offer\_collection\_definition` call. Plan from that response is authoritative and must be shown. State "Standalone Offer — single product, single plan" in output. Always show `Offer Collection ID : Not available` — the field must appear so the analyst can see it was looked for and not found. If `get\_offer\_collection\_definition` returns a non-empty `offers\[]`, emit the UNEXPECTED block.|
-|Offer Collection (bundle)|WordPress hosting + M365 or Titan Email|`prePurchaseKeyMap` has one or more entries. Output field: `Offer Collection ID` (same UUID as `offerId` from `get\_curated\_offer` — label distinguishes it from a standalone). Never use the top-level plan. Iterate all `prePurchaseKeyMap.offers\[]` entries — for each, call `get\_offer\_definition\_by\_id` and record `offerId`, `name`, `tags\[]`, and the `plan` from the `prePurchaseKeyMap` entry. All Component Offer IDs are primary ecomm payload — a missing row means ecomm builds an incomplete offer. Also look up any `offers\[]` entries from `get\_offer\_collection\_definition` that are absent from `prePurchaseKeyMap` and list them in a separate table (not required for the clone, but must not be silently dropped).|
+|Standalone Offer|Domain or SSL sold without add-ons|Apply geometry-aware field rules (Quick Reference). `prePurchaseKeyMap` absent or empty. Always emit `Offer Collection ID : Not available`. If `get\_offer\_collection\_definition` returns non-empty `offers\[]`, emit the UNEXPECTED block.|
+|Offer Collection (bundle)|WordPress hosting + M365 or Titan Email|Apply geometry-aware field rules (Quick Reference). `prePurchaseKeyMap` has entries. Iterate all `prePurchaseKeyMap.offers\[]` — call `get\_offer\_definition\_by\_id` for each. List any `offers\[]` entries absent from `prePurchaseKeyMap` in a separate table. See Chain Step 3 for the fast-path exception.|
 
 When in doubt, show more not less. It is always better to present a row and let the analyst exclude it than to silently omit it.
 
@@ -2627,74 +2741,3 @@ Notes           : {anything unexpected — WebFetch ambiguity, zero rows, term m
 # Offer Pulse — Use Case Log
 <!-- append-only; one entry per run; written by offer-pulse after every output -->
 ```
-
-\---
-
-## Validation Block
-
-**Always shown at the end of every offer-pulse output — no exceptions, no gating.**
-
-The Validation Block is how the golden set is built over time. Since the correct answer isn't known upfront, the analyst confirms or corrects the output after seeing it. Confirmed outputs are promoted to the golden set for future test runs.
-
-Show the Validation Block immediately after the final output (after the "No ticket has been created" line). Do not wait for the analyst to ask. Do not skip it for any reason.
-
-\---
-
-### NES Validation Block
-
-Show this when path\_type is NES Standalone or NES Bundle:
-
-```
----
-## Validation
-
-To improve future results, please confirm or correct these fields:
-
-1. \*\*Path type\*\* — Is this correctly classified as \[NES Standalone / NES Bundle]?
-2. \*\*Source offer\*\* — Is `{package\_id}` the correct curated offer slug for this ticket?
-3. \*\*Plan name\*\* — Is `{plan\_name from get\_offer\_collection\_definition}` the correct plan?
-4. \*\*Discount code\*\* — Is `{discount\_code}` correct, or should it be different/none?
-5. \*\*Pricing\*\* — Do the sale/list prices look right for this market and term?
-
-Reply `save {case\_id}` to promote this output to the golden set (e.g. `save AGIGROWTH-161`).
-Reply `skip` to continue without saving.
-
-\*Saving helps /batch-test verify future runs against analyst-confirmed correct answers.\*
-```
-
-\---
-
-### CES Validation Block
-
-Show this when path\_type is CES:
-
-```
----
-## Validation
-
-To improve future results, please confirm or correct these fields:
-
-1. \*\*Path type\*\* — Is this correctly classified as CES?
-2. \*\*PFID coverage\*\* — Are all the PFIDs in the output correct for this surface/ticket? Any missing or extra?
-3. \*\*Discount codes\*\* — Are the discount codes shown correct for each PFID?
-4. \*\*Package structure\*\* — Does the champion package (if found) match what's actually live on the surface?
-5. \*\*Term/tier\*\* — Do the term and tier values look right for each row?
-
-Reply `save {case\_id}` to promote this output to the golden set (e.g. `save CMS-33982`).
-Reply `skip` to continue without saving.
-
-\*Saving helps /batch-test verify future runs against analyst-confirmed correct answers.\*
-```
-
-\---
-
-### `save <case\_id>` handler
-
-When the analyst replies `save <case\_id>` after a Validation Block:
-
-1. Invoke `/golden-set promote <case\_id>` — pass the confirmed output fields (with any corrections the analyst stated) as context.
-2. The golden-set skill handles formatting, preview, and write. Do not write to golden-set.md directly from offer-pulse.
-
-When the analyst replies `skip`:
-
-Do nothing. Continue normally.

@@ -38,18 +38,9 @@ Output the reference card below verbatim. Do not read any other files.
   curated offer IDs with catalog detail. Fast path for FOS surfaces.
   Called automatically by /offer-pulse for slp_* and dlp_* surfaces.
 
-/surface-profile <ITC|alias>
-  2-query lightweight scout before a full audit. Returns NES/CES
-  split, top packages, top PFIDs, and last-audited date. Use first
-  when you don't know a surface's state.
-
 /surface-vocab <alias>                     e.g. "FOS", "precheck"
   Translate human surface names to specific ITCs. 680 ITCs profiled.
   Add: /surface-vocab explore <ITC>
-
-/migration-check <ITC|product>
-  Live NES% query against CLN/billing. Use before assuming a surface
-  is NES or CES — migration timelines are estimates.
 
 /ces-nes <question>
   Architecture Q&A: three-layer NES hierarchy, CES PFID arrays,
@@ -124,10 +115,9 @@ Agent: claude-code-guide
 /offer-matrix → /coverage matrix
 /system-gaps  → /gaps
 /user-gaps    → /gaps user
-/measure      → /ledger measure
 
 ════════════════════════════════════════════════════════════════════
-Last rebuilt: 2026-05-17
+Last rebuilt: 2026-06-10
 ════════════════════════════════════════════════════════════════════
 ```
 
