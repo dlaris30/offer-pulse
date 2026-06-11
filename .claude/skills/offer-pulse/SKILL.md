@@ -602,7 +602,7 @@ Look up the URL for the resolved ITC from the Bypass A URL table in D4 (the URL 
 | Pattern | Surfaces | Command |
 |---|---|---|
 | `nes-prefix` | slp_wordpress, slp_airo_wordpress, slp_wordpress_support, slp_hosting_category | `node scrapers/extract_curated_offers.js {URL} 2>/dev/null` |
-| `productPackage` | slp_hosting_4GH, slp_365_*, slp_wsb_*, slp_ssl, slp_website_security_suites, slp_airoaibuilder, slp_airo_plus, ddc_starter_01 | `node scrapers/debug_email.js {URL} 2>/dev/null` |
+| `productPackage` | slp_hosting_4GH, slp_365_*, slp_wsb_*, slp_ssl, slp_website_security_suites, slp_airoaibuilder, slp_airo_plus, ddc_starter_01 | `node scrapers/scrape_market.js {URL} 2>/dev/null` |
 
 For `nes-prefix` output: each item has `curatedOfferId` (already stripped of `nes-` prefix), `planType`, `recommended`, `salePrice`, `oldPrice`, `priceTag`, `itc`, `destination`.
 For `productPackage` output: extract `productPackage` field as `curatedOfferId`, strip `nes-` prefix if present.
