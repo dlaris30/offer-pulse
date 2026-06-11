@@ -81,7 +81,7 @@ async function extractCuratedOffers(url) {
         const ftM  = before.match(/"flagText"\s*:\s*"([^"]+)"/g);
         const ptgM = before.match(/"priceTag"\s*:\s*"([^"]+)"/g);
         const opM  = before.match(/"oldPrice"\s*:\s*"([^"]+)"/g);
-        const spM  = before.match(/"price"\s*:\s*"(\$[^"]+)"/g);
+        const spM  = before.match(/"price"\s*:\s*"([^"]+)"/g);
         const tmM  = after.match(/"productPackageTermLengthInMonths"\s*:\s*(\d+)/);
         const itcM = after.match(/itemTrackingCode["']:\s*["']([^"']+)["']/);
         const dstM = after.match(/["']destination["']:\s*["']([^"']+)["']/);

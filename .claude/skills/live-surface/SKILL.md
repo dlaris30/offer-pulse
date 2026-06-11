@@ -92,33 +92,37 @@ Match the input against this lookup (case-insensitive):
 
 **Country name / code aliases:**
 
-| Analyst says | Resolves to |
-|---|---|
-| US, United States, en-US, (none) | *(US default — no prefix)* |
-| AU, Australia | `en-au` |
-| CA, Canada | `en-ca` (English primary; use `fr-ca` for French) |
-| CA-FR, Canada French | `fr-ca` |
-| UK, GB, United Kingdom | `en-uk` |
-| IN, India, India English | `en-in` |
-| IN-HI, India Hindi, hi-IN | `hi-in` |
-| JP, Japan | `ja-JP` |
-| KR, Korea, South Korea | `ko-KR` |
-| DE, Germany | `de` |
-| FR, France | `fr` |
-| ES, Spain | `es-es` |
-| MX, Mexico | `es` |
-| BR, Brazil | `pt-br` |
-| PT, Portugal | `pt-pt` |
-| IT, Italy | `it` |
-| NL, Netherlands | `nl` |
-| NO, Norway | `nb-NO` |
-| SE, Sweden | `sv-SE` |
-| DK, Denmark | `da-DK` |
-| PH, Philippines | `en-ph` |
-| SG, Singapore | `en` |
-| AE, UAE | `en` |
-| IR, Ireland | `en` |
-| NZ, New Zealand | `en` |
+| Analyst says | URL token | Market cookie |
+|---|---|---|
+| US, United States, en-US, (none) | *(US default — no prefix)* | *(none)* |
+| AU, Australia | `en-au` | — |
+| CA, Canada | `en-ca` (English primary; use `fr-ca` for French) | — |
+| CA-FR, Canada French | `fr-ca` | — |
+| UK, GB, United Kingdom | `en-uk` | — |
+| IN, India, India English | `en-in` | — |
+| IN-HI, India Hindi, hi-IN | `hi-in` | — |
+| JP, Japan | `ja-JP` | — |
+| KR, Korea, South Korea | `ko-KR` | — |
+| DE, Germany | `de` | — |
+| FR, France | `fr` | — |
+| ES, Spain | `es-es` | — |
+| MX, Mexico | `es` | — |
+| BR, Brazil | `pt-br` | — |
+| PT, Portugal | `pt-pt` | — |
+| IT, Italy | `it` | — |
+| NL, Netherlands | `nl` | — |
+| NO, Norway | `nb-NO` | — |
+| SE, Sweden | `sv-SE` | — |
+| DK, Denmark | `da-DK` | — |
+| PH, Philippines | `en-ph` | — |
+| SG, Singapore | `en` | `en-SG` |
+| AE, UAE | `en` | `en-AE` |
+| IE, Ireland | `en` | `en-IE` |
+| NZ, New Zealand | `en` | `en-NZ` |
+| HK, Hong Kong | `en` | `en-HK` |
+| IL, Israel | `en` | `en-IL` |
+
+**Consolidated URL markets (SG, AE, IE, NZ, HK, IL):** These 6 markets all route to the `/en` URL path. The Market cookie distinguishes them at the Sitecore layer — without it, the scraper returns the `/en` no-cookie default, not the market-specific offer set. Pass the Market cookie as the second argument to `scrape_market.js` (see Step 1).
 
 If the input already matches a token in the lookup table below (e.g., `en-in`, `fr`, `ko-KR`), use it directly.
 
@@ -338,9 +342,14 @@ Parse the JSON array returned. Each item has these fields — collect all:
 
 **For `productPackage` pattern** (email/WAM pages — JSON embedded in page source):
 ```bash
-node scrapers/debug_email.js {URL} 2>/dev/null
+node scrapers/scrape_market.js {URL} 2>/dev/null                   # US or unique-path markets
+node scrapers/scrape_market.js {URL} {market-cookie} 2>/dev/null   # consolidated URL markets (SG/AE/IE/NZ/HK/IL)
 ```
-Parse the JSON returned. Each item in `productPackages` is an object with the same fields as above (`productPackage`, `planType`, `recommended`, `recommendedLabel`, `termLengthMonths`, `salePrice`, `oldPrice`, `priceTag`, `itc`, `destination`). Extract `productPackage` as the raw value. If it starts with `nes-`, strip that prefix. The result is the curated offer ID. Fields are null when the Sitecore component for that surface doesn't embed them (e.g., `slp_hosting_4gh` does not include pricing or term metadata).
+Pass the Market cookie from the M1 table when one is set. Markets with unique URL paths (en-au, en-ca, en-uk, en-in, en-ph, etc.) do not require a cookie — omit the second argument.
+
+The top-level output includes `cookie`, `inputUrl`, `finalUrl`, and `status`. Carry `finalUrl` and `status` forward for Step 5 rendering. Each item in `productPackages` is an object with the same fields as above (`productPackage`, `planType`, `recommended`, `recommendedLabel`, `termLengthMonths`, `salePrice`, `oldPrice`, `priceTag`, `itc`, `destination`). Extract `productPackage` as the raw value. If it starts with `nes-`, strip that prefix. The result is the curated offer ID. Fields are null when the Sitecore component for that surface doesn't embed them (e.g., `slp_hosting_4gh` does not include pricing or term metadata).
+
+When `finalUrl` differs from `inputUrl`, a page redirect occurred (common on non-English markets with translated URL slugs). Record both values. When `finalUrl` is on a different domain from `godaddy.com`, flag as cross-domain redirect.
 
 If the result is empty (empty array or `productPackages: []`), output:
 ```
@@ -481,7 +490,7 @@ If Step 1b did not fire (no tier argument, or all `planType` values were null), 
 
 ```
 === Live Surface: {ITC} ===
-Source    : {final URL}
+Source    : {finalUrl}  — or when redirected: {inputUrl} → {finalUrl}; ⚠️ cross-domain redirect if domain ≠ godaddy.com
 Market    : {token} ({country/description}) — or "US (default)"
 Scraped   : {today's date}
 Offers    : {N} found

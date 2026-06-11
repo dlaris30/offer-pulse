@@ -112,6 +112,11 @@ node ~/projects/offer-pulse/scrapers/extract_curated_offers.js https://www.test-
 ```
 Should return a JSON array of curated offer objects. If it returns `[]`, check VPN.
 
+```bash
+node ~/projects/offer-pulse/scrapers/scrape_market.js https://www.godaddy.com/hosting/web-hosting 2>/dev/null
+```
+Should return a JSON object with a `productPackages` array. Used by `/live-surface` for email and WAM pages — supports optional market cookie injection for international markets.
+
 ---
 
 ## Step 4 — Add the Launch Alias
